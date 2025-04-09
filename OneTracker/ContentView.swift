@@ -351,9 +351,9 @@ struct ContentView: View {
                     Label("Fitness", systemImage: "figure.run")
                 }
 
-            Text("Health Screen")
+            HealthView()
                 .tabItem {
-                    Label("Health", systemImage: "heart")
+                    Label("Health", systemImage: "heart.fill")
                 }
         }
     }
