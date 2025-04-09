@@ -253,7 +253,7 @@ struct ContentView: View {
                             .padding(.bottom, 10)
                             .background(Color(UIColor.systemBackground)) // Match the background color
 
-                            List {
+            List {
                                 // Remove the custom header section
                                 // The date-grouped sections remain unchanged
                                 ForEach(sectionOrder, id: \.self) { dateKey in
@@ -346,9 +346,9 @@ struct ContentView: View {
                     Label("Planning", systemImage: "chart.bar.fill")
                 }
 
-            Text("Fitness Screen")
+            FitnessView()
                 .tabItem {
-                    Label("Fitness", systemImage: "figure.walk")
+                    Label("Fitness", systemImage: "figure.run")
                 }
 
             Text("Health Screen")
