@@ -6,13 +6,15 @@
 //
 
 import SwiftUI
-import SwiftData
+import SwiftData // Re-add SwiftData import
 
 @main
 struct OneTrackerApp: App {
+    // Re-add the sharedModelContainer
     var sharedModelContainer: ModelContainer = {
+        // Include Transaction in the schema
         let schema = Schema([
-            Item.self,
+            Transaction.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -27,6 +29,7 @@ struct OneTrackerApp: App {
         WindowGroup {
             ContentView()
         }
+        // Re-add the modelContainer modifier
         .modelContainer(sharedModelContainer)
     }
 }
