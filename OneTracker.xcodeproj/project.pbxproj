@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		3BCFF2602DA8A93400B8DA78 /* LinkKit in Frameworks */ = {isa = PBXBuildFile; productRef = 3BCFF25F2DA8A93400B8DA78 /* LinkKit */; };
+		3BCFF2A12DA99CE600B8DA78 /* LinkKit in Frameworks */ = {isa = PBXBuildFile; productRef = 3BCFF2A02DA99CE600B8DA78 /* LinkKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -69,7 +69,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3BCFF2602DA8A93400B8DA78 /* LinkKit in Frameworks */,
+				3BCFF2A12DA99CE600B8DA78 /* LinkKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -130,7 +130,7 @@
 			);
 			name = OneTracker;
 			packageProductDependencies = (
-				3BCFF25F2DA8A93400B8DA78 /* LinkKit */,
+				3BCFF2A02DA99CE600B8DA78 /* LinkKit */,
 			);
 			productName = OneTracker;
 			productReference = 3B2C5D392DA62829009C50AA /* OneTracker.app */;
@@ -215,7 +215,7 @@
 			mainGroup = 3B2C5D302DA62829009C50AA;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				3BCFF25E2DA8A93400B8DA78 /* XCRemoteSwiftPackageReference "plaid-link-ios-spm" */,
+				3BCFF29F2DA99CE600B8DA78 /* XCRemoteSwiftPackageReference "plaid-link-ios-spm" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 3B2C5D3A2DA62829009C50AA /* Products */;
@@ -596,7 +596,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		3BCFF25E2DA8A93400B8DA78 /* XCRemoteSwiftPackageReference "plaid-link-ios-spm" */ = {
+		3BCFF29F2DA99CE600B8DA78 /* XCRemoteSwiftPackageReference "plaid-link-ios-spm" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/plaid/plaid-link-ios-spm";
 			requirement = {
@@ -607,9 +607,9 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		3BCFF25F2DA8A93400B8DA78 /* LinkKit */ = {
+		3BCFF2A02DA99CE600B8DA78 /* LinkKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 3BCFF25E2DA8A93400B8DA78 /* XCRemoteSwiftPackageReference "plaid-link-ios-spm" */;
+			package = 3BCFF29F2DA99CE600B8DA78 /* XCRemoteSwiftPackageReference "plaid-link-ios-spm" */;
 			productName = LinkKit;
 		};
 /* End XCSwiftPackageProductDependency section */

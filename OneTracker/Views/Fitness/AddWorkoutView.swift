@@ -6,6 +6,7 @@ struct AddWorkoutView: View {
     let workoutTypes: [String]
     let onSave: (FitnessActivity) -> Void
     
+    // Form State
     @State private var selectedType = "Running"
     @State private var duration = "30"
     @State private var calories = "200"
@@ -13,7 +14,7 @@ struct AddWorkoutView: View {
     @State private var notes = ""
     @State private var intensity: FitnessActivity.Intensity = .moderate
     
-    // Type-specific fields
+    // Type-specific fields state
     @State private var distance = ""
     @State private var sets = ""
     @State private var reps = ""
@@ -26,219 +27,237 @@ struct AddWorkoutView: View {
     @State private var route = ""
     @State private var style = ""
     
-    // Swimming stroke types
+    // Focus state management
+    @FocusState private var focusedField: Bool // Simple boolean focus state for now
+
+    // Data for Pickers
     private let strokeTypes = ["Freestyle", "Breaststroke", "Backstroke", "Butterfly", "Mixed"]
-    
-    // Yoga styles
     private let yogaStyles = ["Hatha", "Vinyasa", "Ashtanga", "Yin", "Power", "Restorative", "Hot"]
     
     var body: some View {
-        NavigationStack {
-            Form {
-                // Workout type
-                Section("Workout Type") {
-                    Picker("Type", selection: $selectedType) {
-                        ForEach(workoutTypes, id: \.self) { type in
-                            Text(type).tag(type)
+        // Replace NavigationStack with VStack
+        VStack(spacing: 0) {
+            // Custom Header
+             HStack {
+                Button("Cancel") { isPresented = false }
+                    .buttonStyle(NeumorphicButtonStyle())
+                Spacer()
+                Text("Add Workout") // Use static title
+                    .font(.headline).fontWeight(.semibold)
+                    .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                Spacer()
+                Button("Save") { saveWorkout() }
+                    .buttonStyle(NeumorphicButtonStyle())
+                    .disabled(!isValidForm()) // Add validation check for save button
+             }
+             .padding()
+             .background(neumorphicBackgroundColor) // Consistent header background
+
+            // Replace Form with ScrollView
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) { // Main content stack
+                    
+                    // --- Workout Type Card --- 
+                    SectionHeader(title: "Workout Type")
+                    VStack {
+                        // Wrap Picker in InputRow
+                        InputRow(label: "Type") {
+                            Picker("Type", selection: $selectedType) {
+                                ForEach(workoutTypes, id: \.self) { type in
+                                    Text(type).tag(type)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .tint(Color(hex: "0D2750").opacity(0.8))
                         }
                     }
-                    .pickerStyle(.menu)
-                }
-                
-                // Basic details
-                Section("Basic Details") {
-                    HStack {
-                        Text("Duration")
-                        Spacer()
-                        TextField("Minutes", text: $duration)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                    }
+                    .padding()
+                    .background(neumorphicCardBackground())
                     
-                    HStack {
-                        Text("Calories Burned")
-                        Spacer()
-                        TextField("Calories", text: $calories)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                    }
-                    
-                    // Intensity picker
-                    Picker("Intensity", selection: $intensity) {
-                        ForEach(FitnessActivity.Intensity.allCases, id: \.self) { level in
-                            // Display only the text label for each option
-                            Text(level.rawValue)
-                                .tag(level)
+                    // --- Basic Details Card --- 
+                    SectionHeader(title: "Basic Details")
+                    VStack(alignment: .leading, spacing: 15) {
+                        InputRow(label: "Duration") {
+                            TextField("Minutes", text: $duration)
+                                .keyboardType(.numberPad)
                         }
-                    }
-                    
-                    HStack {
-                        Text("Heart Rate (avg)")
-                        Spacer()
-                        TextField("BPM", text: $heartRate)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                    }
-                    
-                    DatePicker("Date", selection: $date, displayedComponents: [.date, .hourAndMinute])
-                }
-                
-                // Type-specific details
-                if selectedType == "Running" || selectedType == "Walking" || selectedType == "Cycling" {
-                    Section("Activity Details") {
-                        HStack {
-                            Text("Distance")
-                            Spacer()
-                            TextField("miles", text: $distance)
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
+                        InputRow(label: "Calories Burned") {
+                            TextField("Calories", text: $calories)
+                                .keyboardType(.numberPad)
+                        }
+                        InputRow(label: "Heart Rate (avg)") {
+                            TextField("BPM", text: $heartRate)
+                                .keyboardType(.numberPad)
                         }
                         
-                        if selectedType == "Running" || selectedType == "Walking" {
-                            HStack {
-                                Text("Pace")
-                                Spacer()
-                                TextField("min/mile", text: $pace)
-                                    .keyboardType(.decimalPad)
-                                    .multilineTextAlignment(.trailing)
+                        // Wrap Picker in InputRow
+                        InputRow(label: "Intensity") {
+                            Picker("Intensity", selection: $intensity) {
+                                ForEach(FitnessActivity.Intensity.allCases, id: \.self) { level in
+                                    Text(level.rawValue).tag(level)
+                                }
                             }
-                            
+                            .pickerStyle(.segmented)
+                            // .background(neumorphicBackgroundColor.opacity(0.6)) // Let InputRow handle layout
+                            // .cornerRadius(8) // Segmented style provides its own look
+                        }
+                        
+                        DatePicker("Date", selection: $date, displayedComponents: [.date, .hourAndMinute])
+                             .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                             .accentColor(Color(hex: "0D2750").opacity(0.8))
+                    }
+                    .padding()
+                    .background(neumorphicCardBackground())
+
+                    // --- Dynamic Activity Details Card --- 
+                     // Conditionally show based on selectedType
+                     if !typeSpecificSectionTitle.isEmpty {
+                        SectionHeader(title: typeSpecificSectionTitle)
+                        VStack(alignment: .leading, spacing: 15) {
+                            // Include relevant fields based on selectedType
+                            if selectedType == "Running" || selectedType == "Walking" || selectedType == "Cycling" {
+                                InputRow(label: "Distance") {
+                                    TextField(selectedType == "Swimming" ? "yards" : "miles", text: $distance)
+                                        .keyboardType(.decimalPad)
+                                }
+                            }
+                             if selectedType == "Running" || selectedType == "Walking" {
+                                 InputRow(label: "Pace") {
+                                    TextField("min/mile", text: $pace)
+                                        .keyboardType(.decimalPad)
+                                }
+                            }
                             if selectedType == "Walking" {
-                                HStack {
-                                    Text("Steps")
-                                    Spacer()
+                                InputRow(label: "Steps") {
                                     TextField("count", text: $steps)
                                         .keyboardType(.numberPad)
-                                        .multilineTextAlignment(.trailing)
+                                }
+                            }
+                             if selectedType == "Cycling" {
+                                 InputRow(label: "Elevation Gain") {
+                                    TextField("feet", text: $elevationGain)
+                                        .keyboardType(.decimalPad)
+                                }
+                            }
+                            if selectedType == "Running" || selectedType == "Walking" || selectedType == "Cycling" {
+                                InputRow(label: "Route") {
+                                    TextField("optional", text: $route)
+                                }
+                            }
+                             if selectedType == "Swimming" {
+                                InputRow(label: "Distance") { // Repeated Distance for swimming units
+                                    TextField("yards", text: $distance)
+                                        .keyboardType(.decimalPad)
+                                }
+                                 InputRow(label: "Laps") {
+                                    TextField("count", text: $laps)
+                                        .keyboardType(.numberPad)
+                                }
+                                Picker("Stroke", selection: $style) {
+                                    Text("Select").tag("")
+                                    ForEach(strokeTypes, id: \.self) { stroke in Text(stroke).tag(stroke) }
+                                }
+                                .tint(Color(hex: "0D2750").opacity(0.8))
+                            }
+                            if selectedType == "Weights" {
+                                InputRow(label: "Sets") {
+                                    TextField("count", text: $sets)
+                                        .keyboardType(.numberPad)
+                                }
+                                InputRow(label: "Reps") {
+                                    TextField("count", text: $reps)
+                                        .keyboardType(.numberPad)
+                                }
+                                InputRow(label: "Weight") {
+                                    TextField("lbs", text: $weight)
+                                        .keyboardType(.decimalPad)
+                                }
+                            }
+                            if selectedType == "Yoga" {
+                                Picker("Style", selection: $style) {
+                                    Text("Select").tag("")
+                                    ForEach(yogaStyles, id: \.self) { yogaStyle in Text(yogaStyle).tag(yogaStyle) }
+                                }
+                                .tint(Color(hex: "0D2750").opacity(0.8))
+                            }
+                            if selectedType == "HIIT" {
+                                InputRow(label: "Rounds") {
+                                    TextField("count", text: $sets) // Reusing sets state for rounds
+                                        .keyboardType(.numberPad)
                                 }
                             }
                         }
-                        
-                        if selectedType == "Cycling" {
-                            HStack {
-                                Text("Elevation Gain")
-                                Spacer()
-                                TextField("feet", text: $elevationGain)
-                                    .keyboardType(.decimalPad)
-                                    .multilineTextAlignment(.trailing)
-                            }
-                        }
-                        
-                        HStack {
-                            Text("Route")
-                            Spacer()
-                            TextField("optional", text: $route)
-                                .multilineTextAlignment(.trailing)
-                        }
+                        .padding()
+                        .background(neumorphicCardBackground())
+                     }
+
+                    // --- Notes Card --- 
+                    SectionHeader(title: "Notes")
+                    VStack {
+                        TextEditor(text: $notes)
+                             .frame(minHeight: 100, maxHeight: 200)
+                             .scrollContentBackground(.hidden) // Allow background color to show
+                             .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12)) // Add padding for text
+                             .background(neumorphicBackgroundColor) // Apply background color directly
+                             .cornerRadius(10) // Apply corner radius
+                              // Explicit focus management for TextEditor might be needed
+                             .focused($focusedField)
                     }
-                }
-                
-                if selectedType == "Swimming" {
-                    Section("Swimming Details") {
-                        HStack {
-                            Text("Distance")
-                            Spacer()
-                            TextField("yards", text: $distance)
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                        }
-                        
-                        HStack {
-                            Text("Laps")
-                            Spacer()
-                            TextField("count", text: $laps)
-                                .keyboardType(.numberPad)
-                                .multilineTextAlignment(.trailing)
-                        }
-                        
-                        Picker("Stroke", selection: $style) {
-                            Text("Select").tag("")
-                            ForEach(strokeTypes, id: \.self) { stroke in
-                                Text(stroke).tag(stroke)
-                            }
-                        }
-                    }
-                }
-                
-                if selectedType == "Weights" {
-                    Section("Weight Training Details") {
-                        HStack {
-                            Text("Sets")
-                            Spacer()
-                            TextField("count", text: $sets)
-                                .keyboardType(.numberPad)
-                                .multilineTextAlignment(.trailing)
-                        }
-                        
-                        HStack {
-                            Text("Reps")
-                            Spacer()
-                            TextField("count", text: $reps)
-                                .keyboardType(.numberPad)
-                                .multilineTextAlignment(.trailing)
-                        }
-                        
-                        HStack {
-                            Text("Weight")
-                            Spacer()
-                            TextField("lbs", text: $weight)
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                        }
-                    }
-                }
-                
-                if selectedType == "Yoga" {
-                    Section("Yoga Details") {
-                        Picker("Style", selection: $style) {
-                            Text("Select").tag("")
-                            ForEach(yogaStyles, id: \.self) { yogaStyle in
-                                Text(yogaStyle).tag(yogaStyle)
-                            }
-                        }
-                    }
-                }
-                
-                if selectedType == "HIIT" {
-                    Section("HIIT Details") {
-                        HStack {
-                            Text("Rounds")
-                            Spacer()
-                            TextField("count", text: $sets)
-                                .keyboardType(.numberPad)
-                                .multilineTextAlignment(.trailing)
-                        }
-                    }
-                }
-                
-                // Notes
-                Section("Notes") {
-                    TextEditor(text: $notes)
-                        .frame(minHeight: 100)
-                }
-            }
-            .navigationTitle("Add Workout")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        isPresented = false
-                    }
-                }
-                
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        saveWorkout()
-                    }
-                }
-            }
-            .onChange(of: selectedType) {
-                // Reset type-specific fields when changing workout type
+                     .padding()
+                     .background(neumorphicCardBackground())
+                    
+                } // End Main content VStack
+                .padding() // Padding around all cards
+            } // End ScrollView
+             .background(neumorphicBackgroundColor) // Match background
+             .ignoresSafeArea(.keyboard, edges: .bottom)
+             .onTapGesture { focusedField = false } // Dismiss keyboard on tap
+             .onChange(of: selectedType) { _, _ in
                 clearTypeSpecificFields()
+             }
+        } // End Outer VStack
+    }
+    
+    // Helper to get dynamic section title
+    private var typeSpecificSectionTitle: String {
+        switch selectedType {
+            case "Running", "Walking", "Cycling": return "Activity Details"
+            case "Swimming": return "Swimming Details"
+            case "Weights": return "Weight Training Details"
+            case "Yoga": return "Yoga Details"
+            case "HIIT": return "HIIT Details"
+            default: return "" // No specific section for "Other"
+        }
+    }
+    
+    // Helper View for Input Rows (Label + TextField)
+    private struct InputRow<Content: View>: View {
+        let label: String
+        @ViewBuilder let content: Content
+
+        var body: some View {
+            HStack {
+                Text(label)
+                    .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                Spacer()
+                content
+                    .multilineTextAlignment(.trailing)
+                    .textFieldStyle(NeumorphicTextFieldStyle())
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
     }
     
+    private func isValidForm() -> Bool {
+         // Basic validation: duration and calories must be positive numbers
+         guard let durationInt = Int(duration), durationInt > 0, 
+               let caloriesInt = Int(calories), caloriesInt > 0 else {
+             return false
+         }
+         // Add more specific validation based on workout type if needed
+         return true
+    }
+
     private func clearTypeSpecificFields() {
         distance = ""
         sets = ""
@@ -250,16 +269,18 @@ struct AddWorkoutView: View {
         steps = ""
         route = ""
         style = ""
+        // Don't clear heart rate as it's in basic details now
     }
     
     private func saveWorkout() {
-        // Convert string inputs to integers with validation
-        guard let durationInt = Int(duration), durationInt > 0,
-              let caloriesInt = Int(calories), caloriesInt > 0 else {
+        guard isValidForm(), // Use validation check
+              let durationInt = Int(duration),
+              let caloriesInt = Int(calories) else {
+            // Optionally show an alert for invalid data
+            print("Invalid data for saving workout")
             return
         }
         
-        // Create the new activity
         var newActivity = FitnessActivity(
             type: selectedType,
             duration: durationInt,
@@ -269,52 +290,19 @@ struct AddWorkoutView: View {
             intensity: intensity
         )
         
-        // Add type-specific details if provided
-        if !distance.isEmpty, let distanceValue = Double(distance) {
-            newActivity.distance = distanceValue
-        }
+        // Add optional fields if they have valid values
+        if !distance.isEmpty, let val = Double(distance) { newActivity.distance = val }
+        if !sets.isEmpty, let val = Int(sets) { newActivity.sets = val }
+        if !reps.isEmpty, let val = Int(reps) { newActivity.reps = val }
+        if !weight.isEmpty, let val = Double(weight) { newActivity.weight = val }
+        if !pace.isEmpty, let val = Double(pace) { newActivity.pace = val }
+        if !laps.isEmpty, let val = Int(laps) { newActivity.laps = val }
+        if !elevationGain.isEmpty, let val = Double(elevationGain) { newActivity.elevationGain = val }
+        if !heartRate.isEmpty, let val = Int(heartRate) { newActivity.heartRate = val }
+        if !steps.isEmpty, let val = Int(steps) { newActivity.steps = val }
+        if !route.isEmpty { newActivity.route = route }
+        if !style.isEmpty { newActivity.style = style }
         
-        if !sets.isEmpty, let setsValue = Int(sets) {
-            newActivity.sets = setsValue
-        }
-        
-        if !reps.isEmpty, let repsValue = Int(reps) {
-            newActivity.reps = repsValue
-        }
-        
-        if !weight.isEmpty, let weightValue = Double(weight) {
-            newActivity.weight = weightValue
-        }
-        
-        if !pace.isEmpty, let paceValue = Double(pace) {
-            newActivity.pace = paceValue
-        }
-        
-        if !laps.isEmpty, let lapsValue = Int(laps) {
-            newActivity.laps = lapsValue
-        }
-        
-        if !elevationGain.isEmpty, let elevationValue = Double(elevationGain) {
-            newActivity.elevationGain = elevationValue
-        }
-        
-        if !heartRate.isEmpty, let heartRateValue = Int(heartRate) {
-            newActivity.heartRate = heartRateValue
-        }
-        
-        if !steps.isEmpty, let stepsValue = Int(steps) {
-            newActivity.steps = stepsValue
-        }
-        
-        if !route.isEmpty {
-            newActivity.route = route
-        }
-        
-        if !style.isEmpty {
-            newActivity.style = style
-        }
-        
-        // Save and dismiss
         onSave(newActivity)
         isPresented = false
     }

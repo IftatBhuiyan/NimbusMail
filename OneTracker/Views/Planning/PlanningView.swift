@@ -87,181 +87,22 @@ struct PlanningView: View {
                 
                 // Content Scroll Area
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 20) { // Add spacing for sections
+                    LazyVStack(alignment: .leading, spacing: 25) { // Add spacing between sections
                         
                         // --- Monthly Budget Card --- 
                         SectionHeader(title: "Monthly Budget")
-                        
-                        VStack(alignment: .leading, spacing: 10) {
-                            // Budget Amount Row
-                            HStack {
-                                Text("Budget:")
-                                    .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-                                Spacer()
-                                if isEditingBudget {
-                                    TextField("Amount", text: $monthlyBudget)
-                                        .keyboardType(.decimalPad)
-                                        .multilineTextAlignment(.trailing)
-                                        .textFieldStyle(.plain)
-                                        .padding(8)
-                                        .background(neumorphicBackgroundColor.opacity(0.5).cornerRadius(5))
-                                        .frame(width: 120)
-                                    Button("Save") {
-                                        // Basic validation
-                                        if Double(monthlyBudget) != nil { 
-                                            isEditingBudget = false
-                                        } else {
-                                            // Handle invalid input (e.g., alert)
-                                            monthlyBudget = "1000.00" // Revert or show error
-                                        }
-                                    }
-                                    .buttonStyle(NeumorphicButtonStyle(isPressed: false))
-                                    .padding(.leading, 5)
-                                } else {
-                                    Text(formatCurrency(Double(monthlyBudget) ?? 0))
-                                        .fontWeight(.medium)
-                                        .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-                                    Button {
-                                        isEditingBudget = true
-                                    } label: {
-                                        Image(systemName: "pencil.circle")
-                                             .foregroundColor(Color(hex: "0D2750").opacity(0.7))
-                                    }
-                                }
-                            }
-                            
-                            // Progress Bar Area
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text("Monthly Progress:")
-                                    .font(.subheadline)
-                                    .foregroundColor(Color(hex: "0D2750").opacity(0.7))
-                                
-                                GeometryReader { geometry in
-                                    ZStack(alignment: .leading) {
-                                        // Background Track
-                                        RoundedRectangle(cornerRadius: 5)
-                                            .fill(neumorphicBackgroundColor)
-                                            .shadow(color: darkInnerShadowColor, radius: 2, x: 1, y: 1) // Subtle inner shadow
-                                            .shadow(color: lightInnerShadowColor, radius: 2, x: -1, y: -1)
-                                            .frame(height: 20)
-                                        
-                                        // Progress Fill
-                                        RoundedRectangle(cornerRadius: 5)
-                                            .fill(progressColor)
-                                            .frame(width: max(0, geometry.size.width * budgetProgress), height: 20)
-                                            .animation(.spring(), value: budgetProgress)
-                                            .shadow(color: darkDropShadowColor.opacity(0.1), radius: 3, x: 2, y: 2) // Subtle drop shadow on progress
-                                    }
-                                }
-                                .frame(height: 20)
-                                .clipShape(RoundedRectangle(cornerRadius: 5)) // Clip shadows to bar shape
-                                
-                                // Spent/Remaining Text
-                                HStack {
-                                    Text("Spent: \(formatCurrency(currentMonthSpending))")
-                                    Spacer()
-                                    if let budget = Double(monthlyBudget) {
-                                        Text("Remaining: \(formatCurrency(max(budget - currentMonthSpending, 0)))")
-                                            .foregroundColor(budget < currentMonthSpending ? .red : Color(hex: "0D2750").opacity(0.7))
-                                    }
-                                }
-                                .font(.caption)
-                                .foregroundColor(Color(hex: "0D2750").opacity(0.7))
-                            }
-                        }
-                        .padding()
-                        .background(neumorphicCardBackground())
+                        monthlyBudgetCard // Call computed property
                         
                         // --- Savings Goal Card --- 
                         SectionHeader(title: "Savings Goal")
-                        
-                        VStack(alignment: .leading, spacing: 10) {
-                             // Target Amount Row
-                            HStack {
-                                Text("Target Amount:")
-                                     .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-                                Spacer()
-                                if isEditingSavings {
-                                    TextField("Goal", text: $savingsGoal)
-                                        .keyboardType(.decimalPad)
-                                        .multilineTextAlignment(.trailing)
-                                        .textFieldStyle(.plain)
-                                        .padding(8)
-                                        .background(neumorphicBackgroundColor.opacity(0.5).cornerRadius(5))
-                                        .frame(width: 120)
-                                    Button("Save") {
-                                        // Basic validation
-                                        if Double(savingsGoal) != nil {
-                                            isEditingSavings = false
-                                        } else {
-                                            savingsGoal = "5000.00" // Revert or show error
-                                        }
-                                    }
-                                     .buttonStyle(NeumorphicButtonStyle(isPressed: false))
-                                     .padding(.leading, 5)
-                                } else {
-                                    Text(formatCurrency(Double(savingsGoal) ?? 0))
-                                        .fontWeight(.medium)
-                                        .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-                                    Button {
-                                        isEditingSavings = true
-                                    } label: {
-                                        Image(systemName: "pencil.circle")
-                                             .foregroundColor(Color(hex: "0D2750").opacity(0.7))
-                                    }
-                                }
-                            }
-                            
-                            // Target Date Row
-                            HStack {
-                                Text("Target Date:")
-                                     .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-                                Spacer()
-                                DatePicker("", selection: $savingsDeadline, displayedComponents: .date)
-                                    .labelsHidden()
-                                    .onChange(of: savingsDeadline) { _, newDate in saveSavingsDeadline(date: newDate) }
-                                    .accentColor(Color(hex: "0D2750").opacity(0.8))
-                            }
-                            
-                            // Monthly Savings Needed Row
-                            if let goalAmount = Double(savingsGoal), goalAmount > 0 {
-                                let months = max(Calendar.current.dateComponents([.month], from: Date(), to: savingsDeadline).month ?? 1, 1)
-                                let monthlySavingsNeeded = goalAmount / Double(months)
-                                
-                                HStack {
-                                    Text("Monthly savings needed:")
-                                         .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-                                    Spacer()
-                                    Text(formatCurrency(monthlySavingsNeeded))
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-                                }
-                            }
-                        }
-                        .padding()
-                        .background(neumorphicCardBackground())
+                        savingsGoalCard // Call computed property
                         
                         // --- Financial Tips Section --- 
                         SectionHeader(title: "Financial Tips")
-                        
-                        // Tip Cards
-                        TipView(title: "50/30/20 Rule", 
-                               description: "Try to allocate 50% of your budget to needs, 30% to wants, and 20% to savings.")
-                            .padding()
-                            .background(neumorphicCardBackground())
-                        
-                        TipView(title: "Track Recurring Expenses", 
-                               description: "Review your subscriptions regularly to avoid unnecessary recurring charges.")
-                            .padding()
-                            .background(neumorphicCardBackground())
-                        
-                        TipView(title: "Emergency Fund", 
-                               description: "Aim to save 3-6 months of expenses for emergencies.")
-                            .padding()
-                            .background(neumorphicCardBackground())
+                        financialTipsSection // Call computed property
                         
                     } // End LazyVStack
-                    .padding(.horizontal) // Padding for the cards
+                    .padding(.horizontal) // Horizontal padding for all cards
                     .padding(.bottom) // Bottom padding for scroll content
                 } // End ScrollView
             } // End Main Content VStack
@@ -274,14 +115,171 @@ struct PlanningView: View {
              .clipShape(RoundedRectangle(cornerRadius: 20))
              .padding() // Padding around the inner-shadowed area
         } // End ZStack
-        .onAppear { // Load initial date correctly
+        .onAppear { // Load initial date correctly on appear
              let savedInterval = UserDefaults.standard.double(forKey: "savingsDeadlineInterval")
              // Ensure a valid date, defaulting if needed
-             savingsDeadline = savedInterval > 0 ? Date(timeIntervalSinceReferenceDate: savedInterval) : Calendar.current.date(byAdding: .month, value: 6, to: Date())! 
+             if savedInterval > 0 {
+                 savingsDeadline = Date(timeIntervalSinceReferenceDate: savedInterval)
+             } else {
+                 // If nothing saved or invalid, set default and save it
+                 let defaultDate = Calendar.current.date(byAdding: .month, value: 6, to: Date())!
+                 savingsDeadline = defaultDate
+                 saveSavingsDeadline(date: defaultDate)
+             }
          }
     }
     
-    // Helper function to create the neumorphic card background
+    // MARK: - Computed View Properties for Body Clarity
+    
+    private var monthlyBudgetCard: some View {
+        VStack(alignment: .leading, spacing: 15) { // Increased spacing inside card
+            // Budget Amount Row
+            HStack {
+                Text("Budget:")
+                    .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                Spacer()
+                if isEditingBudget {
+                    TextField("Amount", text: $monthlyBudget)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .textFieldStyle(NeumorphicTextFieldStyle()) // Apply neumorphic text field style
+                        .frame(width: 120)
+                    Button("Save") {
+                        // Basic validation before saving
+                        if Double(monthlyBudget) != nil {
+                            isEditingBudget = false
+                            // @AppStorage handles saving automatically
+                        } else {
+                            // Revert to previous valid value if input is bad
+                            monthlyBudget = UserDefaults.standard.string(forKey: "monthlyBudget") ?? "1000.00"
+                        }
+                    }
+                    .buttonStyle(NeumorphicButtonStyle()) // Apply neumorphic button style
+                } else {
+                    Text(formatCurrency(Double(monthlyBudget) ?? 0))
+                        .fontWeight(.medium)
+                        .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                    Button { isEditingBudget = true } label: {
+                        Image(systemName: "pencil.circle")
+                            .foregroundColor(Color(hex: "0D2750").opacity(0.7))
+                    }
+                    .tint(Color(hex: "0D2750").opacity(0.7)) // Control button tint
+                }
+            }
+
+            // Progress Bar Area
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Monthly Progress:")
+                    .font(.subheadline)
+                    .foregroundColor(Color(hex: "0D2750").opacity(0.7))
+
+                NeumorphicProgressView(value: budgetProgress, color: progressColor)
+                    .frame(height: 20)
+
+                // Spent/Remaining Text
+                HStack {
+                    Text("Spent: \(formatCurrency(currentMonthSpending))")
+                    Spacer()
+                    if let budget = Double(monthlyBudget) {
+                        Text("Remaining: \(formatCurrency(max(0, budget - currentMonthSpending))) ") // Ensure remaining isn't negative
+                            .foregroundColor(budget < currentMonthSpending ? .red : Color(hex: "0D2750").opacity(0.7))
+                    }
+                }
+                .font(.caption)
+                .foregroundColor(Color(hex: "0D2750").opacity(0.7))
+            }
+        }
+        .padding() // Padding inside the card
+        .background(neumorphicCardBackground()) // Apply drop shadow card background
+    }
+    
+    private var savingsGoalCard: some View {
+        VStack(alignment: .leading, spacing: 15) { // Increased spacing inside card
+            // Target Amount Row
+            HStack {
+                Text("Target Amount:")
+                    .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                Spacer()
+                if isEditingSavings {
+                    TextField("Goal", text: $savingsGoal)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .textFieldStyle(NeumorphicTextFieldStyle()) // Apply neumorphic style
+                        .frame(width: 120)
+                    Button("Save") {
+                        // Basic validation before saving
+                        if Double(savingsGoal) != nil {
+                            isEditingSavings = false
+                            // @AppStorage handles saving automatically
+                        } else {
+                            savingsGoal = UserDefaults.standard.string(forKey: "savingsGoal") ?? "5000.00"
+                        }
+                    }
+                    .buttonStyle(NeumorphicButtonStyle()) // Apply neumorphic style
+                } else {
+                    Text(formatCurrency(Double(savingsGoal) ?? 0))
+                        .fontWeight(.medium)
+                        .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                    Button { isEditingSavings = true } label: {
+                        Image(systemName: "pencil.circle")
+                            .foregroundColor(Color(hex: "0D2750").opacity(0.7))
+                    }
+                    .tint(Color(hex: "0D2750").opacity(0.7))
+                }
+            }
+
+            // Target Date Row
+            HStack {
+                Text("Target Date:")
+                    .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                Spacer()
+                DatePicker("", selection: $savingsDeadline, displayedComponents: .date)
+                    .labelsHidden()
+                    .onChange(of: savingsDeadline) { _, newDate in saveSavingsDeadline(date: newDate) }
+                    .accentColor(Color(hex: "0D2750").opacity(0.8)) // Style DatePicker accent
+                    // Consider adding a neumorphic background to DatePicker if possible/desired
+            }
+
+            // Monthly Savings Needed Row
+            if let goalAmount = Double(savingsGoal), goalAmount > 0 {
+                let months = max(Calendar.current.dateComponents([.month], from: Date(), to: savingsDeadline).month ?? 1, 1)
+                let monthlySavingsNeeded = goalAmount / Double(months)
+
+                HStack {
+                    Text("Monthly savings needed:")
+                        .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                    Spacer()
+                    Text(formatCurrency(monthlySavingsNeeded))
+                        .fontWeight(.semibold)
+                        .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                }
+            }
+        }
+        .padding() // Padding inside the card
+        .background(neumorphicCardBackground()) // Apply drop shadow card background
+    }
+    
+    private var financialTipsSection: some View {
+         // Use a VStack to group the tip cards with consistent spacing
+         VStack(spacing: 15) { 
+            TipView(title: "50/30/20 Rule",
+                   description: "Try to allocate 50% of your budget to needs, 30% to wants, and 20% to savings.")
+                .padding()
+                .background(neumorphicCardBackground())
+
+            TipView(title: "Track Recurring Expenses",
+                   description: "Review your subscriptions regularly to avoid unnecessary recurring charges.")
+                .padding()
+                .background(neumorphicCardBackground())
+
+            TipView(title: "Emergency Fund",
+                   description: "Aim to save 3-6 months of expenses for emergencies.")
+                .padding()
+                .background(neumorphicCardBackground())
+         }
+    }
+    
+    // Helper function to create the neumorphic card background (Drop Shadow 2)
     @ViewBuilder
     private func neumorphicCardBackground() -> some View {
         RoundedRectangle(cornerRadius: 15)
@@ -296,63 +294,6 @@ struct PlanningView: View {
     }
 }
 
-// MARK: - Helper Views
-
-// Simple Text Header for Sections
-struct SectionHeader: View {
-    let title: String
-    
-    var body: some View {
-        Text(title)
-            .font(.title3)
-            .fontWeight(.semibold)
-            .foregroundColor(Color(hex: "0D2750").opacity(0.7))
-            .padding(.leading) // Align with card content
-            .padding(.top, 10)
-            .padding(.bottom, 5)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-// Tip View (Already defined, adjust colors if needed)
-struct TipView: View {
-    let title: String
-    let description: String
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title)
-                .font(.headline)
-                 .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-            Text(description)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-        }
-        // Padding applied by the caller now
-    }
-}
-
-// Custom Button Style for Neumorphism
-struct NeumorphicButtonStyle: ButtonStyle {
-    var isPressed: Bool // You might pass this in if tracking press state
-    
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(neumorphicBackgroundColor)
-                    // Apply opposite shadows when pressed
-                    .shadow(color: configuration.isPressed ? lightDropShadowColor : darkDropShadowColor, radius: 5, x: configuration.isPressed ? -3 : 3, y: configuration.isPressed ? -3 : 3)
-                    .shadow(color: configuration.isPressed ? darkDropShadowColor : lightDropShadowColor, radius: 5, x: configuration.isPressed ? 3 : -3, y: configuration.isPressed ? 3 : -3)
-            )
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: configuration.isPressed)
-    }
-}
-
-
 // MARK: - Preview
 
 #Preview {
@@ -361,6 +302,10 @@ struct NeumorphicButtonStyle: ButtonStyle {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Transaction.self, configurations: config)
         
+        // Add some sample transactions if needed for preview calculation
+        let sampleTransaction = Transaction(merchant: "Coffee Shop", bank: "Preview Bank", amount: 4.50, date: Date())
+        container.mainContext.insert(sampleTransaction)
+
         return PlanningView()
             .modelContainer(container)
     } catch {

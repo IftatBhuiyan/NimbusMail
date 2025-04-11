@@ -15,13 +15,13 @@ struct AddTransactionView: View {
     @Environment(\.dismiss) var dismiss
 
     // State variables for form input
-    @State private var merchantName: String = ""
-    @State private var bankName: String = ""
-    @State private var amountString: String = ""
-    @State private var transactionDate: Date = Date() // Acts as start date for recurring
-    @State private var selectedFrequency: Frequency = .oneTime
-    @State private var recurringEndDate: Date? = nil
-    @State private var hasEndDate: Bool = false // Toggle for optional end date
+    @State private var merchantName: String
+    @State private var bankName: String
+    @State private var amountString: String
+    @State private var transactionDate: Date
+    @State private var selectedFrequency: Frequency
+    @State private var recurringEndDate: Date?
+    @State private var hasEndDate: Bool
 
     // Properties to hold suggestion lists
     let allMerchantNames: [String]
@@ -39,6 +39,11 @@ struct AddTransactionView: View {
     @FocusState private var focusedField: Field?
     private enum Field: Hashable {
         case merchant, bank, amount
+    }
+
+    // Computed property for view title
+    private var viewTitle: String {
+        transactionToEdit == nil ? "Add Transaction" : "Edit Transaction"
     }
 
     // Update the explicit initializer to accept optional transaction and suggestions
@@ -73,142 +78,179 @@ struct AddTransactionView: View {
         }
     }
 
-    // Formatter for currency input
-    private var currencyFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
-        return formatter
-    }()
-
     var body: some View {
-        NavigationView {
-            Form {
-                // Use Sections for potentially better grouping (optional)
-                Section("Transaction Details") {
-                    VStack(alignment: .leading) { // Use VStack to stack TextField and suggestions
-                        Label {
-                            TextField("Merchant Name", text: $merchantName)
-                                .focused($focusedField, equals: .merchant)
-                                .onChange(of: merchantName) { oldValue, newValue in
-                                    filterMerchantSuggestions(newValue: newValue)
-                                }
-                        } icon: {
-                            Image(systemName: "storefront") // Icon for merchant
-                        }
+        // Replace NavigationView with VStack for manual control
+        VStack(spacing: 0) {
+            // Custom Header (Replaces Navigation Bar)
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .buttonStyle(NeumorphicButtonStyle()) // Apply style
+                
+                Spacer()
+                
+                Text(viewTitle)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                
+                Spacer()
+                
+                Button("Save") {
+                    saveTransaction()
+                }
+                .buttonStyle(NeumorphicButtonStyle())
+                .disabled(!isFormDataValid())
+                
+            }
+            .padding()
+            .background(neumorphicBackgroundColor) // Header background
+            
+            // Use ScrollView instead of Form for flexible styling
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) { // Main content stack
+                    
+                    // --- Transaction Details Card --- 
+                    SectionHeader(title: "Transaction Details")
+                    
+                    VStack(alignment: .leading, spacing: 15) {
+                        // Merchant Input
+                        VStack(alignment: .leading) {
+                            Label {
+                                TextField("Merchant Name", text: $merchantName)
+                                    .focused($focusedField, equals: .merchant)
+                                    .onChange(of: merchantName) { filterMerchantSuggestions(newValue: $1) }
+                                    .textFieldStyle(NeumorphicTextFieldStyle())
+                            } icon: {
+                                Image(systemName: "storefront")
+                                    .foregroundColor(Color(hex: "0D2750").opacity(0.7))
+                            }
 
-                        // Display merchant suggestions
-                        if focusedField == .merchant && !filteredMerchantNames.isEmpty {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack {
-                                    ForEach(filteredMerchantNames, id: \.self) { name in
-                                        Button(name) {
-                                            merchantName = name
-                                            filteredMerchantNames = [] // Clear suggestions
-                                            focusedField = nil // Dismiss keyboard
+                            // Merchant Suggestions
+                            if focusedField == .merchant && !filteredMerchantNames.isEmpty {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack {
+                                        ForEach(filteredMerchantNames, id: \.self) { name in
+                                            Button(name) {
+                                                merchantName = name
+                                                filteredMerchantNames = []
+                                                focusedField = nil
+                                            }
+                                            .buttonStyle(NeumorphicButtonStyle()) // Style suggestions
+                                            .font(.caption)
                                         }
-                                        .buttonStyle(.bordered)
-                                        .tint(.gray)
                                     }
                                 }
-                                .padding(.leading, 40) // Indent suggestions under the icon/label
+                                .frame(height: 40)
+                                .padding(.leading, 30) // Indent suggestions
                             }
-                            .frame(height: 40)
                         }
-                    }
+                        
+                        // Bank Input
+                        VStack(alignment: .leading) {
+                            Label {
+                                TextField("Bank Name", text: $bankName)
+                                    .focused($focusedField, equals: .bank)
+                                    .onChange(of: bankName) { filterBankSuggestions(newValue: $1) }
+                                    .textFieldStyle(NeumorphicTextFieldStyle())
+                            } icon: {
+                                Image(systemName: "building.columns")
+                                     .foregroundColor(Color(hex: "0D2750").opacity(0.7))
+                            }
 
-                    VStack(alignment: .leading) { // Use VStack for Bank suggestions
-                        Label {
-                            TextField("Bank Name", text: $bankName)
-                                .focused($focusedField, equals: .bank)
-                                .onChange(of: bankName) { oldValue, newValue in
-                                    filterBankSuggestions(newValue: newValue)
-                                }
-                        } icon: {
-                            Image(systemName: "building.columns") // Icon for bank
-                        }
-
-                        // Display bank suggestions
-                        if focusedField == .bank && !filteredBankNames.isEmpty {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack {
-                                    ForEach(filteredBankNames, id: \.self) { name in
-                                        Button(name) {
-                                            bankName = name
-                                            filteredBankNames = [] // Clear suggestions
-                                            focusedField = nil // Dismiss keyboard
+                            // Bank Suggestions
+                            if focusedField == .bank && !filteredBankNames.isEmpty {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                     HStack {
+                                        ForEach(filteredBankNames, id: \.self) { name in
+                                            Button(name) {
+                                                bankName = name
+                                                filteredBankNames = []
+                                                focusedField = nil
+                                            }
+                                            .buttonStyle(NeumorphicButtonStyle())
+                                            .font(.caption)
                                         }
-                                        .buttonStyle(.bordered)
-                                        .tint(.gray)
                                     }
                                 }
-                                .padding(.leading, 40)
+                                .frame(height: 40)
+                                .padding(.leading, 30)
                             }
-                            .frame(height: 40)
+                        }
+
+                        // Amount Input
+                        Label {
+                            TextField("Amount", text: $amountString)
+                                .keyboardType(.decimalPad)
+                                .focused($focusedField, equals: .amount)
+                                .textFieldStyle(NeumorphicTextFieldStyle())
+                        } icon: {
+                            Image(systemName: "dollarsign.circle")
+                                 .foregroundColor(Color(hex: "0D2750").opacity(0.7))
                         }
                     }
+                    .padding()
+                    .background(neumorphicCardBackground()) // Card background
 
-                    Label {
-                        TextField("Amount", text: $amountString)
-                            .keyboardType(.decimalPad)
-                            .focused($focusedField, equals: .amount)
-                    } icon: {
-                        Image(systemName: "dollarsign.circle") // Icon for amount
-                    }
-                }
+                    // --- Frequency & Dates Card --- 
+                    SectionHeader(title: "Frequency & Dates")
+                    
+                    VStack(alignment: .leading, spacing: 15) {
+                         // Frequency Picker
+                         Picker("Frequency", selection: $selectedFrequency) {
+                            ForEach(Frequency.allCases, id: \.self) { frequency in
+                                Text(frequency.rawValue).tag(frequency)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                         .background(neumorphicBackgroundColor.opacity(0.6)) // Subtle background
+                         .cornerRadius(8)
+                        
+                        // Date Picker (Start Date)
+                        DatePicker(selectedFrequency == .oneTime ? "Date" : "Start Date",
+                                   selection: $transactionDate,
+                                   displayedComponents: .date)
+                         .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                         .accentColor(Color(hex: "0D2750").opacity(0.8))
 
-                Section("Frequency & Dates") {
-                    Picker("Frequency", selection: $selectedFrequency) {
-                        ForEach(Frequency.allCases, id: \.self) { frequency in
-                            Text(frequency.rawValue).tag(frequency)
+                        // Recurring Options
+                        if selectedFrequency == .recurring {
+                            Toggle("Set End Date", isOn: $hasEndDate.animation())
+                                .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                                .tint(Color.blue) // Keep a standard tint for toggle
+
+                            if hasEndDate {
+                                DatePicker("End Date",
+                                           selection: Binding<Date>( // Binding for optional Date
+                                            get: { self.recurringEndDate ?? Date() },
+                                            set: { self.recurringEndDate = $0 }
+                                           ),
+                                           in: transactionDate...,
+                                           displayedComponents: .date)
+                                    .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                                    .accentColor(Color(hex: "0D2750").opacity(0.8))
+                            }
                         }
                     }
-                    .pickerStyle(.segmented) // Use segmented style for two options
-
-                    // Label adjusts based on frequency
-                    DatePicker(selectedFrequency == .oneTime ? "Date" : "Start Date",
-                               selection: $transactionDate,
-                               displayedComponents: .date)
-
-                    // Show recurring options only if selected
-                    if selectedFrequency == .recurring {
-                        Toggle("Set End Date", isOn: $hasEndDate.animation())
-
-                        if hasEndDate {
-                            DatePicker("End Date",
-                                       selection: Binding<Date>( // Binding to handle optional Date
-                                        get: { self.recurringEndDate ?? Date() },
-                                        set: { self.recurringEndDate = $0 }
-                                       ),
-                                       in: transactionDate..., // End date must be after start date
-                                       displayedComponents: .date)
-                        }
-                    }
-                }
-            }
-            .navigationTitle(transactionToEdit == nil ? "Add Transaction" : "Edit Transaction")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        saveTransaction()
-                    }
-                    .disabled(!isFormDataValid())
-                }
-            }
-        }
+                    .padding()
+                    .background(neumorphicCardBackground()) // Card background
+                    
+                } // End Main VStack for content
+                .padding() // Padding around the content cards
+            } // End ScrollView
+            .background(neumorphicBackgroundColor) // Ensure scroll view background matches
+            .ignoresSafeArea(.keyboard, edges: .bottom) // Prevent keyboard overlap
+        } // End Outer VStack
     }
+
+    // --- Helper Functions --- 
 
     private func filterMerchantSuggestions(newValue: String) {
         if newValue.isEmpty {
             filteredMerchantNames = []
         } else {
+            // Simple prefix matching for better performance potentially
             filteredMerchantNames = allMerchantNames.filter { $0.localizedCaseInsensitiveContains(newValue) }
         }
     }
@@ -236,6 +278,7 @@ struct AddTransactionView: View {
     private func saveTransaction() {
         guard let amount = Double(amountString), isFormDataValid() else {
             print("Invalid amount or form data")
+            // Consider showing an alert to the user
             return
         }
         // Use the state variables to create form data
@@ -249,20 +292,33 @@ struct AddTransactionView: View {
         onSave(formData)
         dismiss()
     }
+
+    // Helper for card background (assumes definition exists in NeumorphismStyles.swift or similar)
+    @ViewBuilder
+    private func neumorphicCardBackground() -> some View {
+        RoundedRectangle(cornerRadius: 15)
+            .fill(neumorphicBackgroundColor)
+            .shadow(color: darkDropShadowColor, radius: darkDropShadowBlur / 2, x: darkDropShadowX / 2, y: darkDropShadowY / 2)
+            .shadow(color: lightDropShadowColor, radius: lightDropShadowBlur / 2, x: lightDropShadowX / 2, y: lightDropShadowY / 2)
+    }
 }
 
 // Preview Provider
 #Preview("Add") {
     // Provide sample suggestions for preview
     AddTransactionView(allMerchantNames: ["Walmart", "Target", "Whole Foods"], allBankNames: ["Chase", "Citi", "Wells Fargo"], onSave: { _ in })
+        // Apply background for preview context
+        .background(neumorphicBackgroundColor)
 }
 
 #Preview("Edit - One Time") {
     let previewTransaction = Transaction(merchant: "Existing Store", bank: "Existing Bank", amount: 123.45, date: Date(), frequency: .oneTime)
     return AddTransactionView(transactionToEdit: previewTransaction, allMerchantNames: ["Walmart", "Target", "Existing Store"], allBankNames: ["Chase", "Citi", "Existing Bank"], onSave: { _ in })
+        .background(neumorphicBackgroundColor)
 }
 
 #Preview("Edit - Recurring") {
     let previewTransaction = Transaction(merchant: "Subscription", bank: "Visa", amount: 10.00, date: Calendar.current.date(byAdding: .month, value: -2, to: Date())!, frequency: .recurring, recurringEndDate: Calendar.current.date(byAdding: .month, value: 6, to: Date())!)
     return AddTransactionView(transactionToEdit: previewTransaction, allMerchantNames: ["Netflix", "Spotify"], allBankNames: ["Visa", "Amex"], onSave: { _ in })
+        .background(neumorphicBackgroundColor)
 } 
