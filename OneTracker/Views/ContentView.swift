@@ -13,35 +13,36 @@ enum ActiveSheet: Identifiable {
     case add
     case edit(Transaction)
 
-    // Conformance to Identifiable - use AnyHashable
+    // Use AnyHashable for the ID type to accommodate String and PersistentIdentifier
     var id: AnyHashable {
         switch self {
-        case .add: return "add"
-        case .edit(let transaction): return transaction.persistentModelID // Use SwiftData's persistent ID
+        case .add: return "add" // String conforms to Hashable
+        case .edit(let transaction): return transaction.id // PersistentIdentifier conforms to Hashable
         }
     }
 }
 
-// Enum for selecting the time period
-enum TimePeriod: Equatable {
+// Enum for time period selection
+enum TimePeriod: Hashable {
     case daily
     case weekly
     case monthly
-    case all // Add all-time option
     case custom(DateInterval)
-
-    // Basic display name
+    case all
+    
+    // Add back the display name computed property
     var displayName: String {
         switch self {
         case .daily: return "Daily"
         case .weekly: return "Weekly"
         case .monthly: return "Monthly"
-        case .all: return "All" // Add display name
         case .custom: return "Custom Range"
+        case .all: return "All Time"
         }
     }
 }
 
+// Main Content View (Acts as Finances View in this structure)
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
@@ -212,148 +213,197 @@ struct ContentView: View {
 
     var body: some View {
         TabView {
+            // Finances Tab
             NavigationView {
-                ZStack(alignment: .bottomTrailing) {
-                    // Use conditional view for empty state
-                     if transactions.isEmpty {
-                         ContentUnavailableView("No Transactions", systemImage: "list.bullet.rectangle.portrait", description: Text("Tap the + button to add your first transaction."))
-                     } else {
-                        VStack(spacing: 0) { // Container for fixed header and scrolling list
-                            // Fixed header
-                            HStack {
-                                // Make the title tappable
-                                Button {
-                                    withAnimation {
-                                        isShowingRecurringOnly.toggle()
-                                    }
-                                } label: {
-                                    Text(titleText)
-                                        .font(.largeTitle)
-                                        .fontWeight(.bold)
+                ZStack(alignment: .bottomTrailing) { // ZStack for content and FAB
+                    // Neumorphic Background Color
+                    neumorphicBackgroundColor.edgesIgnoringSafeArea(.all)
+
+                    // Main Content VStack - Apply Inner Shadow (Shadow 4)
+                    VStack(spacing: 0) {
+                        // Fixed header
+                        HStack {
+                            // Make the title tappable
+                            Button {
+                                withAnimation {
+                                    isShowingRecurringOnly.toggle()
                                 }
-                                Spacer()
+                            } label: {
+                                Text(titleText)
+                                    .font(.largeTitle)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(Color(hex: "0D2750").opacity(0.8)) // Neumorphic text color
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+
+                            VStack(alignment: .trailing) {
+                                Text(toolbarTitle)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+
+                                // Make the total tappable to open period selector
                                 Button {
                                     showingPeriodSelector = true
                                 } label: {
-                                    VStack(alignment: .trailing) {
-                                        Text(toolbarTitle)
-                                            .font(.caption)
-                                            .foregroundColor(.gray)
-                                        Text(selectedPeriodTotalString)
-                                            .font(.title3)
-                                            .fontWeight(.semibold)
-                                    }
+                                    Text(selectedPeriodTotalString)
+                                        .font(.title3)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(Color(hex: "0D2750").opacity(0.8)) // Neumorphic text color
                                 }
-                                .tint(.primary)
+                                .tint(.primary) // Keep tint if needed for interaction feedback
                             }
-                            .padding(.horizontal)
-                            .padding(.top)
-                            .padding(.bottom, 10)
-                            .background(Color(UIColor.systemBackground)) // Match the background color
-
-            List {
-                                // Remove the custom header section
-                                // The date-grouped sections remain unchanged
-                                ForEach(sectionOrder, id: \.self) { dateKey in
-                                    Section(header: VStack(alignment: .leading, spacing: 4) {
-                                        Text(dateKey)
-                                            .font(.title3)
-                                            .fontWeight(.medium)
-                                        Divider()
-                                    }) {
-                                        // Iterate over the correct group from the dictionary
-                                        ForEach(groupedTransactions[dateKey] ?? []) { transaction in
-                                            TransactionRow(transaction: transaction)
-                                                .listRowSeparator(.hidden)
-                                                .contentShape(Rectangle())
-                                                .onTapGesture {
-                                                    activeSheet = .edit(transaction)
-                                                }
-                                        }
-                                        .onDelete { indexSet in
-                                            deleteItems(forDateKey: dateKey, offsets: indexSet)
-                                        }
-                                    }
-                                }
-                            }
-                            .listStyle(PlainListStyle())
-                            // Remove extra padding at the top of the list
-                            .scrollContentBackground(.hidden)
-                            .padding(.top, 0)
                         }
-                        // Use .navigationBarHidden to hide the standard title
-                        .navigationBarHidden(true)
-                    }
+                        .padding([.horizontal, .top])
+                        .padding(.bottom, 15) // Padding below header
+                        // Removed header background: .background(Color(UIColor.systemBackground))
 
-                    // Floating Action Button
+                        // Conditional view for empty state or list
+                        if groupedTransactions.isEmpty { // Use groupedTransactions to reflect filters
+                            ContentUnavailableView(
+                                isShowingRecurringOnly ? "No Subscriptions" : "No Transactions",
+                                systemImage: isShowingRecurringOnly ? "repeat.circle" : "list.bullet.rectangle.portrait",
+                                description: Text(isShowingRecurringOnly ? "No recurring transactions found for the selected period." : "Tap the + button to add your first transaction.")
+                            )
+                            .frame(maxWidth: .infinity, maxHeight: .infinity) // Allow empty view to expand
+                            .background(neumorphicBackgroundColor) // Match background
+                        } else {
+                            // --- Use ScrollView + LazyVStack with Pinned Section Headers --- 
+                            ScrollView {
+                                // Enable pinned section headers
+                                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                                    ForEach(sectionOrder, id: \.self) { dateKey in
+                                        // Wrap each date group in a Section
+                                        Section {
+                                            // Transaction Cards for this section (The content of the section)
+                                            // Add spacing between cards within the section using VStack
+                                            VStack(spacing: 15) { 
+                                                ForEach(groupedTransactions[dateKey] ?? []) { transaction in
+                                                    // Button wraps the styled content
+                                                    Button {
+                                                        activeSheet = .edit(transaction)
+                                                    } label: {
+                                                        // Row content - Apply Drop Shadow
+                                                        TransactionRow(transaction: transaction)
+                                                            .padding() // Padding inside the background
+                                                            .background( // Background and Drop Shadow
+                                                                RoundedRectangle(cornerRadius: 10)
+                                                                    .fill(neumorphicBackgroundColor)
+                                                                    .shadow(color: darkDropShadowColor, radius: darkDropShadowBlur / 2, x: darkDropShadowX / 2, y: darkDropShadowY / 2)
+                                                                    .shadow(color: lightDropShadowColor, radius: lightDropShadowBlur / 2, x: lightDropShadowX / 2, y: lightDropShadowY / 2)
+                                                            )
+                                                    } // End Button Label
+                                                    .buttonStyle(.plain)
+                                                }
+                                            }
+                                            .padding(.bottom, 15) // Add padding below the last card in a section
+
+                                        } header: {
+                                            // Section Header Content
+                                            Text(dateKey)
+                                                .font(.title3)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(Color(hex: "0D2750").opacity(0.7))
+                                                .padding(.leading) // Align with card content
+                                                .padding(.vertical, 8) // Adjusted vertical padding for header
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                        // Removed delete functionality here, needs reimplementation if required outside of List
+                                    }
+                                } // End ForEach sectionOrder
+                                .padding(.horizontal) // Padding for the cards within the scroll view
+                                // .padding(.bottom) // Bottom padding handled by VStack spacing or ScrollView itself
+                            } // End ScrollView
+                        }
+                    } // End Main Content VStack
+                     .background( // Apply Inner Shadow (Shadow 4) to the VStack content
+                         RoundedRectangle(cornerRadius: 20)
+                             .fill(neumorphicBackgroundColor)
+                             .shadow(color: darkInnerShadowColor, radius: darkInnerShadowBlur, x: darkInnerShadowX, y: darkInnerShadowY)
+                             .shadow(color: lightInnerShadowColor, radius: lightInnerShadowBlur, x: lightInnerShadowX, y: lightInnerShadowY)
+                     )
+                     .clipShape(RoundedRectangle(cornerRadius: 20))
+                     .padding() // Padding around the inner-shadowed area
+                    .navigationBarHidden(true) // Keep hiding the default nav bar
+
+                    // Floating Action Button - Apply Drop Shadow (Shadow 2)
                     Button(action: {
-                        // Set activeSheet to .add
                         activeSheet = .add
                     }) {
                         Image(systemName: "plus")
                             .font(.system(size: 24, weight: .semibold))
-                            .foregroundColor(.white)
-                            .padding()
-                            .background(Color.blue)
-                            .clipShape(Circle())
-                            .shadow(radius: 5)
+                            .foregroundColor(Color(hex: "0D2750").opacity(0.8)) // Neumorphic icon color
+                            .frame(width: 60, height: 60) // Fixed size
+                            .background(
+                                Circle()
+                                    .fill(neumorphicBackgroundColor)
+                                    .shadow(color: darkDropShadowColor, radius: darkDropShadowBlur, x: darkDropShadowX, y: darkDropShadowY)
+                                    .shadow(color: lightDropShadowColor, radius: lightDropShadowBlur, x: lightDropShadowX, y: lightDropShadowY)
+                            )
+                           // Removed old styling
                     }
-                    .padding() // Add padding from the edges
-                    .padding(.bottom, 20) // Adjusted bottom padding (as per previous step)
-                    .padding(.trailing, 10) // Adjusted right padding (as per previous step)
-                    // Use .sheet(item: ...) modifier
-                    .sheet(item: $activeSheet) { sheetState in // sheetState is the non-nil ActiveSheet value
-                        // Determine transaction to edit based on sheetState
-                        let transactionForSheet: Transaction? = {
-                            if case .edit(let transaction) = sheetState {
-                                return transaction
-                            } else {
-                                return nil // It's the .add case
-                            }
-                        }()
+                    .padding() // Padding from edges
+                    .padding(.bottom, 20) // Adjusted bottom padding
+                    .padding(.trailing, 10) // Adjusted right padding
 
-                        // Present AddTransactionView, passing the optional transaction
-                        AddTransactionView(transactionToEdit: transactionForSheet,
-                                           allMerchantNames: uniqueMerchantNames,
-                                           allBankNames: uniqueBankNames,
-                                           onSave: { formData in
-                            // Save logic remains similar, but uses transactionForSheet
-                            if let existingTransaction = transactionForSheet {
-                                updateTransaction(existingTransaction, with: formData)
+                } // End ZStack
+                // Sheet for adding/editing transactions
+                .sheet(item: $activeSheet) { sheetState in
+                   // ... (existing sheet content for AddTransactionView)
+                   let transactionForSheet: Transaction? = {
+                        if case .edit(let transaction) = sheetState {
+                            return transaction
+                        } else {
+                            return nil
+                        }
+                    }()
+                    AddTransactionView(
+                        transactionToEdit: transactionForSheet,
+                        allMerchantNames: uniqueMerchantNames,
+                        allBankNames: uniqueBankNames,
+                        onSave: { formData in
+                            if let transaction = transactionForSheet {
+                                // Update existing transaction
+                                updateTransaction(transaction, with: formData)
                             } else {
+                                // Add new transaction
                                 addTransaction(formData: formData)
                             }
-                            // No need to manually set activeSheet = nil, sheet(item:) handles dismiss
-                        })
-                        .presentationDetents([.medium, .large])
-                    }
-                    // Add sheet for period selector
-                    .sheet(isPresented: $showingPeriodSelector) {
-                        PeriodSelectorView(selectedPeriod: $selectedPeriod)
-                            .presentationDetents([.medium]) // Show selector at medium height
-                    }
+                        }
+                    )
+                     .background(neumorphicBackgroundColor.edgesIgnoringSafeArea(.all)) // Style sheet background
+                     .presentationDetents([.medium, .large]) // Keep presentation detents
                 }
-                .toolbarRole(.editor)
+                 // Sheet for selecting period
+                .sheet(isPresented: $showingPeriodSelector) {
+                    PeriodSelectorView(selectedPeriod: $selectedPeriod)
+                        .presentationDetents([.medium]) // Use medium height
+                         .background(neumorphicBackgroundColor.edgesIgnoringSafeArea(.all)) // Style sheet background
+                }
+                .toolbarRole(.editor) // Keep toolbar role if needed
             }
             .tabItem {
                 Label("Finance", systemImage: "creditcard.fill") // Use filled icon when selected
             }
 
+            // Planning Tab
             PlanningView()
                 .tabItem {
                     Label("Planning", systemImage: "chart.bar.fill")
                 }
 
+            // Fitness Tab
             FitnessView()
                 .tabItem {
                     Label("Fitness", systemImage: "figure.run")
                 }
 
+            // Health Tab
             HealthView()
                 .tabItem {
                     Label("Health", systemImage: "heart.fill")
                 }
         }
+         .accentColor(.blue) // Keep accent color for selected tab
     }
 
     // Update addTransaction to take formData and include new fields
@@ -401,27 +451,26 @@ struct TransactionRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading) {
-                // Wrap merchant name and potential icon in an HStack
                 HStack {
                     Text(transaction.merchant)
                         .font(.headline)
-                    // Conditionally show recurring icon
+                         .foregroundColor(Color(hex: "0D2750").opacity(0.8)) // Neumorphic text color
                     if transaction.frequency == .recurring {
                         Image(systemName: "repeat")
-                            .font(.caption) // Make icon smaller
-                            .foregroundColor(.gray) // Style the icon
+                            .font(.caption)
+                            .foregroundColor(.gray)
                     }
                 }
                 Text(transaction.bank)
                     .font(.subheadline)
                     .foregroundColor(.gray)
             }
-            Spacer() // Pushes amount to the right
-            // Modified to show negative amount (expense)
-            Text("-" + String(format: "$%.2f", transaction.amount))
+            Spacer()
+            Text("-\(transaction.amount.formatted(.currency(code: Locale.current.currency?.identifier ?? "USD")))") // Use currency formatting
                 .font(.body)
+                 .foregroundColor(Color(hex: "0D2750").opacity(0.8)) // Neumorphic text color
         }
-        .padding(.vertical, 4) // Add some vertical padding to each row
+        // Removed padding here, it's applied outside now
     }
 }
 
@@ -444,3 +493,4 @@ struct TransactionRow: View {
         fatalError("Failed to create model container for preview: \(error.localizedDescription)")
     }
 }
+
