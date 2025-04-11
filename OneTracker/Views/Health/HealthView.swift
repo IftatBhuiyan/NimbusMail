@@ -24,10 +24,13 @@ struct HealthView: View {
                     Text("Health")
                         .font(.largeTitle)
                         .fontWeight(.bold)
+                        .foregroundColor(.blue)
                     Spacer()
                     // Potential place for filters or summary views later
                 }
                 .padding([.horizontal, .top])
+                .padding(.bottom, 10)
+                .background(Color(UIColor.systemBackground))
                 
                 // List of Health Entries
                 List {
@@ -102,7 +105,7 @@ struct HealthView: View {
                     .font(.system(size: 24, weight: .semibold))
                     .foregroundStyle(.white)
                     .padding()
-                    .background(Color.green) // Use a health-related color
+                    .background(Color.blue) // Ensure background is blue
                     .clipShape(Circle())
                     .shadow(radius: 5)
             }

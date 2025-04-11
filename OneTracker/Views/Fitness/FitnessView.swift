@@ -3,6 +3,32 @@ import SwiftData
 
 // Removed FitnessActivity struct definition (moved to Models/FitnessActivity.swift)
 
+// MARK: - Neumorphism Colors
+let neumorphicBackgroundColor = Color(hex: "E8EAEC")
+
+// --- Shadow 2 (Drop Shadow) --- Used for FAB, Stats Card, List Rows
+let darkDropShadowColor = Color(hex: "0D2750").opacity(0.16)
+let darkDropShadowX: CGFloat = 28
+let darkDropShadowY: CGFloat = 28
+let darkDropShadowBlur: CGFloat = 50 / 2 // SwiftUI radius is roughly half the design blur
+
+let lightDropShadowColor = Color.white.opacity(1.0)
+let lightDropShadowX: CGFloat = -23
+let lightDropShadowY: CGFloat = -23
+let lightDropShadowBlur: CGFloat = 45 / 2 // SwiftUI radius is roughly half the design blur
+
+// --- Shadow 4 (Inner Shadow) --- Used for Main Content Area Background
+let lightInnerShadowColor = Color.white.opacity(0.64) // Opacity 64%
+let lightInnerShadowX: CGFloat = -31
+let lightInnerShadowY: CGFloat = -31
+let lightInnerShadowBlur: CGFloat = 43 / 2
+
+let darkInnerShadowColor = Color(hex: "0D2750").opacity(0.16) // Opacity 16%
+let darkInnerShadowX: CGFloat = 26
+let darkInnerShadowY: CGFloat = 26
+let darkInnerShadowBlur: CGFloat = 48 / 2
+
+// MARK: - Fitness View
 struct FitnessView: View {
     // Sample workout types for quick selection
     private let workoutTypes = ["Running", "Walking", "Cycling", "Swimming", "Weights", "Yoga", "HIIT", "Other"]
@@ -116,16 +142,20 @@ struct FitnessView: View {
     
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            VStack(spacing: 0) {
-                // Custom header similar to Finances
+            // Set the background color for the whole view
+            neumorphicBackgroundColor.edgesIgnoringSafeArea(.all)
+
+            // Apply Inner Shadow (Shadow 4) effect to the main content VStack
+            VStack(spacing: 0) { // Content that will appear inside the "pressed" area
+                // Custom header (Part of the inner shadowed content)
                 HStack {
                     Text("Fitness")
                         .font(.largeTitle)
                         .fontWeight(.bold)
+                        .foregroundColor(Color(hex: "0D2750").opacity(0.8))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.leading)
-                    
-                    // Time period selector
+
                     Picker("Time Period", selection: $selectedTimePeriod) {
                         ForEach(TimePeriod.allCases, id: \.self) { period in
                             Text(period.rawValue).tag(period)
@@ -134,21 +164,25 @@ struct FitnessView: View {
                     .pickerStyle(.menu)
                     .padding(.trailing)
                 }
-                .padding(.top)
-                
-                // Stats summary section
+                .padding([.horizontal, .top])
+                .padding(.bottom, 10)
+
+                // Stats summary section - Apply Drop Shadow (Shadow 2) - Should float *out*
                 VStack(spacing: 5) {
-                    HStack {
-                        Text("\(selectedTimePeriod.rawValue) Summary")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.leading)
-                        
-                        Text("\(periodStats.workouts) workouts")
-                            .foregroundColor(.secondary)
-                            .padding(.trailing)
-                    }
-                    
+                     HStack {
+                         Text("\(selectedTimePeriod.rawValue) Summary")
+                             .font(.headline)
+                             .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                             .frame(maxWidth: .infinity, alignment: .leading)
+                             .padding([.leading, .top]) // Add top padding
+
+                         Text("\(periodStats.workouts) workouts")
+                             .foregroundColor(.secondary)
+                             .padding([.trailing, .top]) // Add top padding
+                     }
+                     .padding(.bottom, 15) // Increased from 5 to 15
+
+                    // Revert this HStack to Drop Shadow (Shadow 2)
                     HStack(spacing: 20) {
                         // Duration stat
                         VStack {
@@ -158,14 +192,15 @@ struct FitnessView: View {
                             Text(formatDuration(periodStats.totalDuration))
                                 .font(.title2)
                                 .fontWeight(.bold)
+                                .foregroundColor(Color(hex: "0D2750").opacity(0.8))
                         }
                         .frame(maxWidth: .infinity)
-                        
+
                         // Divider
                         Rectangle()
-                            .fill(Color.gray.opacity(0.5))
+                            .fill(Color.gray.opacity(0.3))
                             .frame(width: 1, height: 40)
-                        
+
                         // Calories stat
                         VStack {
                             Text("Calories")
@@ -174,105 +209,142 @@ struct FitnessView: View {
                             Text("\(periodStats.totalCalories)")
                                 .font(.title2)
                                 .fontWeight(.bold)
+                                .foregroundColor(Color(hex: "0D2750").opacity(0.8))
                         }
                         .frame(maxWidth: .infinity)
                     }
-                    .padding(.vertical, 10)
-                    .background(Color.secondary.opacity(0.1))
-                    .cornerRadius(10)
+                    .padding(.vertical, 15)
                     .padding(.horizontal)
+                    // Apply Drop Shadow (Shadow 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 15)
+                            .fill(neumorphicBackgroundColor)
+                            // Use Drop Shadow parameters
+                            .shadow(color: darkDropShadowColor, radius: darkDropShadowBlur, x: darkDropShadowX, y: darkDropShadowY)
+                            .shadow(color: lightDropShadowColor, radius: lightDropShadowBlur, x: lightDropShadowX, y: lightDropShadowY)
+                    )
+                    .padding(.horizontal) // Padding around the card
+                    .padding(.bottom, 10)
                 }
-                .padding(.top)
-                
-                // Activity list
-                List {
-                    Section("Recent Activities") {
+                .padding(.top) // Space between header and stats card
+
+                // --- Replace List with ScrollView + LazyVStack --- 
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 15) { // Spacing between items in the stack
+                        // Section Header Text
+                        Text("Recent Activities")
+                           .font(.title3)
+                           .fontWeight(.semibold)
+                           .foregroundColor(Color(hex: "0D2750").opacity(0.7))
+                           .padding(.leading) // Align with card content
+                           .padding(.bottom, 5) // Space below header
+                           // .textCase(nil) // Not needed outside List Section
+
+                        // Activity Cards
                         ForEach(filterActivitiesByTimePeriod(fitnessActivities)) { activity in
-                            // Wrap row content in a Button to make it tappable for editing
-                            Button { // Action to set the activity to be edited
-                                activityToEdit = activity
-                            } label: { // The existing HStack is now the Button's label
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 5) {
-                                        // Display workout type and flame icons side-by-side
-                                        HStack(spacing: 2) { // Add spacing between type and flames
+                             // Button wraps the styled content
+                             Button {
+                                 activityToEdit = activity
+                             } label: {
+                                 // Row Content (Button Label) - Apply Drop Shadow (Shadow 2)
+                                 HStack { // This is the content that gets the shadow
+                                     VStack(alignment: .leading, spacing: 5) {
+                                        // ... (Existing content: Type, flames, date, distance, notes)
+                                        HStack(spacing: 4) {
                                             Text(activity.type)
                                                 .font(.headline)
-                                            
-                                            // Display flame icons using if statements based on count
-                                            if activity.intensity.flameCount >= 1 {
-                                                Image(systemName: "flame.fill")
-                                                    .foregroundStyle(activity.intensity.iconColor)
-                                                    .font(.caption)
-                                            }
-                                            if activity.intensity.flameCount >= 2 {
-                                                Image(systemName: "flame.fill")
-                                                    .foregroundStyle(activity.intensity.iconColor)
-                                                    .font(.caption)
-                                            }
-                                            if activity.intensity.flameCount >= 3 {
-                                                Image(systemName: "flame.fill")
-                                                    .foregroundStyle(activity.intensity.iconColor)
-                                                    .font(.caption)
+                                                .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+
+                                            ForEach(0..<activity.intensity.flameCount, id: \.self) { _ in
+                                                 Image(systemName: "flame.fill")
+                                                     .foregroundStyle(activity.intensity.iconColor)
+                                                     .font(.caption)
                                             }
                                         }
-                                            
+
                                         Text(activity.date, style: .date)
                                             .font(.caption)
                                             .foregroundColor(.secondary)
-                                        
-                                        // Show additional type-specific metrics if available
+
                                         if let distance = formatDistance(activity.distance, forType: activity.type) {
                                             Text(distance)
                                                 .font(.caption)
                                                 .foregroundColor(.secondary)
                                         }
-                                        
+
                                         if let notes = activity.notes, !notes.isEmpty {
                                             Text(notes)
                                                 .font(.caption)
                                                 .foregroundColor(.secondary)
                                                 .lineLimit(1)
                                         }
-                                    }
-                                    
-                                    Spacer()
-                                    
-                                    VStack(alignment: .trailing, spacing: 5) {
+                                     }
+
+                                     Spacer()
+
+                                     VStack(alignment: .trailing, spacing: 5) {
+                                         // ... (Existing content: Duration, Calories)
                                         Text("\(formatDuration(activity.duration))")
                                             .font(.subheadline)
                                             .fontWeight(.medium)
-                                        
+                                            .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+
                                         Text("\(activity.calories) cal")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
-                                    }
-                                }
-                            } // End Button label
-                            .buttonStyle(.plain) // Use plain style to keep list row appearance
-                            .padding(.vertical, 5)
-                        }
-                    }
-                }
-                .listStyle(InsetGroupedListStyle())
-            }
-            
-            // Floating Action Button (same style as Finance screen)
+                                     }
+                                 } // End of HStack for row content
+                                 .padding() // Padding *inside* the background
+                                 .background( // Background and Drop Shadow
+                                     RoundedRectangle(cornerRadius: 10)
+                                         .fill(neumorphicBackgroundColor)
+                                         .shadow(color: darkDropShadowColor, radius: darkDropShadowBlur / 2, x: darkDropShadowX / 2, y: darkDropShadowY / 2)
+                                         .shadow(color: lightDropShadowColor, radius: lightDropShadowBlur / 2, x: lightDropShadowX / 2, y: lightDropShadowY / 2)
+                                 )
+                             } // End Button Label
+                             .buttonStyle(.plain)
+                            // No need for List-specific modifiers like listRowInsets, listRowBackground
+                         } // End ForEach
+                    } // End LazyVStack
+                    .padding(.horizontal) // Add horizontal padding to the stack content (keeping cards from edges)
+                    .padding(.bottom) // Add some padding at the bottom of the scroll content
+                } // End ScrollView
+                // Remove List specific modifiers that were here
+                // .listStyle(.plain)
+                // .scrollContentBackground(.hidden)
+
+            } // End Main Content VStack
+            // Apply Inner Shadow (Shadow 4) to the VStack content by applying shadow to background and clipping
+             .background(
+                  RoundedRectangle(cornerRadius: 20) // Define the shape for the inner shadow area
+                      .fill(neumorphicBackgroundColor) // Background color of the shape
+                      // Apply shadows to the background shape itself to create the inner effect
+                      .shadow(color: darkInnerShadowColor, radius: darkInnerShadowBlur, x: darkInnerShadowX, y: darkInnerShadowY)
+                      .shadow(color: lightInnerShadowColor, radius: lightInnerShadowBlur, x: lightInnerShadowX, y: lightInnerShadowY)
+              )
+              .clipShape(RoundedRectangle(cornerRadius: 20)) // Clip the content (header, stats, list)
+              .padding() // Add padding around the inner-shadowed area
+
+            // Floating Action Button (FAB) - Unchanged
             Button(action: {
                 showingAddWorkout = true
             }) {
                 Image(systemName: "plus")
                     .font(.system(size: 24, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding()
-                    .background(Color.blue)
-                    .clipShape(Circle())
-                    .shadow(radius: 5)
+                    .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                    .frame(width: 60, height: 60)
+                    .background(
+                        Circle()
+                            .fill(neumorphicBackgroundColor)
+                            .shadow(color: darkDropShadowColor, radius: darkDropShadowBlur, x: darkDropShadowX, y: darkDropShadowY)
+                            .shadow(color: lightDropShadowColor, radius: lightDropShadowBlur, x: lightDropShadowX, y: lightDropShadowY)
+                    )
             }
-            .padding() // Add padding from the edges
-            .padding(.bottom, 20) // Adjusted bottom padding
-            .padding(.trailing, 10) // Adjusted right padding
-        }
+            .padding()
+            .padding(.bottom, 20)
+            .padding(.trailing, 10)
+
+        } // End ZStack
         .sheet(isPresented: $showingAddWorkout) { // Sheet for Adding
             AddWorkoutView(
                 isPresented: $showingAddWorkout,
@@ -296,6 +368,35 @@ struct FitnessView: View {
                 }
             )
         }
+    }
+}
+
+// Add Color extension for hex values if not already present globally
+// Consider moving this to a separate Utilities file
+extension Color {
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 3: // RGB (12-bit)
+            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
+        case 6: // RGB (24-bit)
+            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        case 8: // ARGB (32-bit)
+            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            (a, r, g, b) = (1, 1, 1, 0) // Default to black for invalid hex
+        }
+
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue: Double(b) / 255,
+            opacity: Double(a) / 255
+        )
     }
 }
 

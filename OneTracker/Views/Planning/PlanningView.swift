@@ -55,6 +55,7 @@ struct PlanningView: View {
                 Text("Planning")
                     .font(.largeTitle)
                     .fontWeight(.bold)
+                    .foregroundColor(.blue)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.leading)
                 
@@ -74,7 +75,9 @@ struct PlanningView: View {
                         .padding()
                 }
             }
-            .padding(.top)
+            .padding([.horizontal, .top])
+            .padding(.bottom, 10)
+            .background(Color(UIColor.systemBackground))
             
             List {
                 // Monthly Budget Section

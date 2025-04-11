@@ -230,8 +230,6 @@ struct ContentView: View {
                                     Text(titleText)
                                         .font(.largeTitle)
                                         .fontWeight(.bold)
-                                        .foregroundColor(.black)
-                                    // Removed the conditional icon
                                 }
                                 Spacer()
                                 Button {
