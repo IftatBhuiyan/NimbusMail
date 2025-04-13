@@ -3,33 +3,27 @@ import FirebaseAuth
 
 struct AuthWrapper: View {
     @StateObject var viewModel = UserViewModel()
-    @State private var showAuth = false
+    // Removed @State private var showAuth - profile is now presented from ContentView header
+    
+    // DEVELOPMENT ONLY: Force skip authentication
+    private let forceSkipAuth = true 
     
     var body: some View {
         Group {
-            if viewModel.isAuthenticated {
+            // Always show ContentView if forceSkipAuth is true, otherwise check viewModel
+            if forceSkipAuth || viewModel.isAuthenticated {
                 ContentView()
                     .environmentObject(viewModel)
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
-                            Button(action: {
-                                showAuth = true
-                            }) {
-                                Image(systemName: "person.circle")
-                                    .font(.title2)
-                            }
-                        }
-                    }
-                    .sheet(isPresented: $showAuth) {
-                        ProfileView(viewModel: viewModel)
-                    }
+                 // Removed toolbar and sheet presentation for profile - handled in ContentView
             } else {
                 AuthView(viewModel: viewModel)
             }
         }
         .onAppear {
-            // Check current auth state on appear
-            viewModel.isAuthenticated = Auth.auth().currentUser != nil
+            // If not forcing skip, check auth state
+            if !forceSkipAuth {
+                viewModel.isAuthenticated = Auth.auth().currentUser != nil
+            }
         }
     }
 } 
