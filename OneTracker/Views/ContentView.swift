@@ -12,12 +12,14 @@ import SwiftData
 enum ActiveSheet: Identifiable {
     case add
     case edit(Transaction)
+    case profile
 
     // Use AnyHashable for the ID type to accommodate String and PersistentIdentifier
     var id: AnyHashable {
         switch self {
         case .add: return "add" // String conforms to Hashable
         case .edit(let transaction): return transaction.id // PersistentIdentifier conforms to Hashable
+        case .profile: return "profile"
         }
     }
 }
@@ -50,6 +52,7 @@ struct ContentView: View {
     @State private var selectedPeriod: TimePeriod = .all // Default to All instead of monthly
     @State private var showingPeriodSelector = false // State to show selector sheet
     @State private var isShowingRecurringOnly = false // Track if we're showing just recurring transactions
+    @EnvironmentObject var viewModel: UserViewModel // Add EnvironmentObject
 
     // Computed property for unique merchant names
     private var uniqueMerchantNames: [String] {
@@ -248,13 +251,13 @@ struct ContentView: View {
                                     Text(selectedPeriodTotalString)
                                         .font(.title3)
                                         .fontWeight(.semibold)
-                                        .foregroundColor(Color(hex: "0D2750").opacity(0.8)) // Neumorphic text color
+                                        .foregroundColor(Color.blue) // Highlight the total
                                 }
-                                .tint(.primary) // Keep tint if needed for interaction feedback
                             }
+                            .padding(.horizontal)
                         }
                         .padding([.horizontal, .top])
-                        .padding(.bottom, 15) // Padding below header
+                        .padding(.bottom, 8) // Reduced bottom padding
                         // Removed header background: .background(Color(UIColor.systemBackground))
 
                         // Conditional view for empty state or list
@@ -282,15 +285,22 @@ struct ContentView: View {
                                                     Button {
                                                         activeSheet = .edit(transaction)
                                                     } label: {
-                                                        // Row content - Apply Drop Shadow
-                                                        TransactionRow(transaction: transaction)
+                                                        // Break down the complex nested expression
+                                                        let rowContent = TransactionRow(transaction: transaction)
                                                             .padding() // Padding inside the background
-                                                            .background( // Background and Drop Shadow
-                                                                RoundedRectangle(cornerRadius: 10)
-                                                                    .fill(neumorphicBackgroundColor)
-                                                                    .shadow(color: darkDropShadowColor, radius: darkDropShadowBlur / 2, x: darkDropShadowX / 2, y: darkDropShadowY / 2)
-                                                                    .shadow(color: lightDropShadowColor, radius: lightDropShadowBlur / 2, x: lightDropShadowX / 2, y: lightDropShadowY / 2)
-                                                            )
+                                                        
+                                                        // Create the background separately
+                                                        let backgroundShape = RoundedRectangle(cornerRadius: 10)
+                                                            .fill(neumorphicBackgroundColor)
+                                                        
+                                                        // Apply shadows separately
+                                                        let shadowedBackground = backgroundShape
+                                                            .shadow(color: darkDropShadowColor, radius: darkDropShadowBlur / 2, x: darkDropShadowX / 2, y: darkDropShadowY / 2)
+                                                            .shadow(color: lightDropShadowColor, radius: lightDropShadowBlur / 2, x: lightDropShadowX / 2, y: lightDropShadowY / 2)
+                                                        
+                                                        // Combine them
+                                                        rowContent
+                                                            .background(shadowedBackground)
                                                     } // End Button Label
                                                     .buttonStyle(.plain)
                                                 }
@@ -347,31 +357,30 @@ struct ContentView: View {
 
                 } // End ZStack
                 // Sheet for adding/editing transactions
-                .sheet(item: $activeSheet) { sheetState in
-                   // ... (existing sheet content for AddTransactionView)
-                   let transactionForSheet: Transaction? = {
-                        if case .edit(let transaction) = sheetState {
-                            return transaction
-                        } else {
-                            return nil
-                        }
-                    }()
-                    AddTransactionView(
-                        transactionToEdit: transactionForSheet,
-                        allMerchantNames: uniqueMerchantNames,
-                        allBankNames: uniqueBankNames,
-                        onSave: { formData in
-                            if let transaction = transactionForSheet {
-                                // Update existing transaction
-                                updateTransaction(transaction, with: formData)
-                            } else {
-                                // Add new transaction
+                .sheet(item: $activeSheet) { item in
+                    switch item {
+                    case .add:
+                        AddTransactionView(
+                            allMerchantNames: uniqueMerchantNames,
+                            allBankNames: uniqueBankNames,
+                            onSave: { formData in
                                 addTransaction(formData: formData)
+                                activeSheet = nil
                             }
-                        }
-                    )
-                     .background(neumorphicBackgroundColor.edgesIgnoringSafeArea(.all)) // Style sheet background
-                     .presentationDetents([.medium, .large]) // Keep presentation detents
+                        )
+                    case .edit(let transaction):
+                        AddTransactionView(
+                            transactionToEdit: transaction,
+                            allMerchantNames: uniqueMerchantNames,
+                            allBankNames: uniqueBankNames,
+                            onSave: { formData in
+                                updateTransaction(transaction, with: formData)
+                                activeSheet = nil
+                            }
+                        )
+                    case .profile:
+                        ProfileView(viewModel: viewModel)
+                    }
                 }
                  // Sheet for selecting period
                 .sheet(isPresented: $showingPeriodSelector) {
@@ -402,6 +411,16 @@ struct ContentView: View {
                 .tabItem {
                     Label("Health", systemImage: "heart.fill")
                 }
+
+            // Profile Tab (New)
+            NavigationView { // Wrap ProfileView in NavigationView for title bar
+                 ProfileView(viewModel: viewModel)
+                    .navigationTitle("Profile") // Add a title
+                    .environmentObject(viewModel) // Ensure viewModel is available
+            }
+            .tabItem {
+                 Label("Profile", systemImage: "person.crop.circle.fill")
+            }
         }
          .accentColor(.blue) // Keep accent color for selected tab
     }

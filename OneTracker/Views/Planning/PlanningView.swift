@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import LinkKit
 
 struct PlanningView: View {
     // State variables for budgets and goals
@@ -14,6 +15,13 @@ struct PlanningView: View {
     
     // Access transactions from SwiftData to calculate budget progress
     @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
+    
+    // MARK: - Plaid Link State
+    @State private var linkToken: String? = nil // To store the fetched link_token
+    @State private var plaidHandler: Handler? = nil // To hold the Plaid handler instance
+    @State private var isShowingPlaidLink = false // To trigger presentation (e.g., via .sheet)
+    @State private var plaidError: Error? = nil // To store potential errors
+    @State private var isLoadingLinkToken = false // Loading indicator state
     
     // Calculate current month's spending
     private var currentMonthSpending: Double {
@@ -96,6 +104,10 @@ struct PlanningView: View {
                         // --- Savings Goal Card --- 
                         SectionHeader(title: "Savings Goal")
                         savingsGoalCard // Call computed property
+                        
+                        // --- Account Linking Card ---
+                        SectionHeader(title: "Account Linking")
+                        accountLinkingCard // Call computed property
                         
                         // --- Financial Tips Section --- 
                         SectionHeader(title: "Financial Tips")
@@ -259,6 +271,49 @@ struct PlanningView: View {
         .background(neumorphicCardBackground()) // Apply drop shadow card background
     }
     
+    // --- New Card for Account Linking ---
+    private var accountLinkingCard: some View {
+        VStack(spacing: 15) {
+             if isLoadingLinkToken {
+                 ProgressView() // Show loading indicator
+                     .padding()
+                     .frame(maxWidth: .infinity)
+             } else {
+                 Button {
+                     Task {
+                         await fetchLinkTokenAndOpenPlaid()
+                     }
+                 } label: {
+                     Label("Link Bank Account", systemImage: "link.badge.plus")
+                         .font(.headline)
+                         .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                         .padding()
+                         .frame(maxWidth: .infinity)
+                 }
+                 .buttonStyle(NeumorphicButtonStyle())
+             }
+
+             // Display error if any
+             if let error = plaidError {
+                 Text("Error: \(error.localizedDescription)")
+                     .font(.caption)
+                     .foregroundColor(.red)
+                     .padding(.top, 5)
+             }
+        }
+        .padding()
+        .background(neumorphicCardBackground()) // Apply drop shadow card background
+        // --- Use .sheet for Plaid Link Presentation ---
+        .sheet(isPresented: $isShowingPlaidLink) {
+            if let handler = plaidHandler {
+                 PlaidLinkViewRepresentable(handler: handler, isPresented: $isShowingPlaidLink)
+            } else {
+                 // Handle case where sheet is shown but handler is nil (should not happen ideally)
+                 Text("Error: Plaid handler not available.")
+            }
+        }
+    }
+    
     private var financialTipsSection: some View {
          // Use a VStack to group the tip cards with consistent spacing
          VStack(spacing: 15) { 
@@ -291,6 +346,118 @@ struct PlanningView: View {
     // Save Deadline Date to UserDefaults as TimeInterval
     private func saveSavingsDeadline(date: Date) {
         UserDefaults.standard.set(date.timeIntervalSinceReferenceDate, forKey: "savingsDeadlineInterval")
+    }
+    
+    // MARK: - Plaid Link Functions
+    
+    private func fetchLinkTokenAndOpenPlaid() async {
+        isLoadingLinkToken = true
+        plaidError = nil
+        
+        // --- 1. Fetch Link Token from Your Backend --- 
+        // This requires a network call to your server endpoint
+        // Replace with your actual network request logic
+        do {
+            // Example: let fetchedToken = try await YourAPIService.shared.fetchLinkToken()
+            // --- Placeholder --- 
+            print("TODO: Fetch link_token from backend...")
+            // Simulate network delay and success
+            try await Task.sleep(nanoseconds: 1_500_000_000) 
+            let fetchedToken = "link-sandbox-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" // Replace with actual fetched token
+            // --- End Placeholder ---
+            self.linkToken = fetchedToken
+            
+            // --- 2. Create Link Configuration --- 
+            guard let token = self.linkToken else {
+                throw PlaidLinkError.missingLinkToken // Define this error type if needed
+            }
+
+            let onSuccess: (LinkSuccess) -> Void = { success in
+                print("Plaid Link Success: public_token=\(success.publicToken) metadata=\(success.metadata)")
+                // TODO: Send success.publicToken to your backend
+                // Example: sendPublicTokenToServer(success.publicToken)
+                self.isShowingPlaidLink = false // Dismiss sheet on success
+                self.plaidHandler = nil
+            }
+
+            var linkConfiguration = LinkTokenConfiguration(
+                token: token,
+                onSuccess: onSuccess
+            )
+
+            linkConfiguration.onExit = { linkExit in
+                self.isShowingPlaidLink = false // Dismiss sheet on exit
+                self.plaidHandler = nil
+                if let error = linkExit.error {
+                    print("Plaid Link Exit with error: \(error.localizedDescription) metadata: \(linkExit.metadata)")
+                    self.plaidError = error
+                } else {
+                    print("Plaid Link Exit (no error): metadata: \(linkExit.metadata)")
+                }
+            }
+
+            linkConfiguration.onEvent = { linkEvent in
+                print("Plaid Link Event: \(linkEvent.eventName) metadata: \(linkEvent.metadata)")
+            }
+            
+            // --- 3. Create Plaid Handler ---
+            // Plaid.create returns a Result, not throwing directly
+            let createResult = Plaid.create(linkConfiguration)
+            switch createResult {
+            case .success(let handler):
+                self.plaidHandler = handler
+            case .failure(let error):
+                throw error // Re-throw the specific Plaid.CreateError
+            }
+            
+            // --- 4. Trigger Sheet Presentation --- 
+            self.isShowingPlaidLink = true // This will show the .sheet
+            // The actual .open() call needs to happen within the sheet's content (e.g., via representable)
+
+        } catch {
+            print("Error during Plaid Link setup: \(error)")
+            self.plaidError = error
+            self.plaidHandler = nil
+        }
+        
+        isLoadingLinkToken = false
+    }
+}
+
+// MARK: - Plaid Link View Representable
+
+import LinkKit
+
+struct PlaidLinkViewRepresentable: UIViewControllerRepresentable {
+    let handler: Handler
+    @Binding var isPresented: Bool // Add binding to control sheet dismissal
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        let viewController = UIViewController()
+        // Present Plaid Link immediately when the representable appears
+        // Use .viewController presentation style, passing the host VC
+        // The completion handler is not used with this presentation method.
+        handler.open(presentUsing: .viewController(viewController))
+        return viewController
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        // No update needed for this simple case
+    }
+}
+
+// MARK: - Placeholder Error Type
+
+enum PlaidLinkError: Error, LocalizedError {
+    case missingLinkToken
+    case handlerCreationFailed
+    // Add other potential error cases
+
+    var errorDescription: String? {
+        switch self {
+        case .missingLinkToken: return "Link token is missing."
+        case .handlerCreationFailed: return "Failed to create Plaid Handler."
+        }
     }
 }
 

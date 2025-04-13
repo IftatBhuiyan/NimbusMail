@@ -7,9 +7,22 @@
 
 import SwiftUI
 import SwiftData // Re-add SwiftData import
+import FirebaseCore
+
+// Configure Firebase
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+        FirebaseApp.configure()
+        return true
+    }
+}
 
 @main
 struct OneTrackerApp: App {
+    // Register app delegate for Firebase setup
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    
     // Re-add the sharedModelContainer
     var sharedModelContainer: ModelContainer = {
         // Include Transaction in the schema
@@ -27,9 +40,9 @@ struct OneTrackerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            AuthWrapper()
+                .modelContainer(sharedModelContainer)
+                .withErrorHandling() // Add global error handling if needed
         }
-        // Re-add the modelContainer modifier
-        .modelContainer(sharedModelContainer)
     }
 }
