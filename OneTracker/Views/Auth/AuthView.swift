@@ -9,69 +9,59 @@ struct AuthView: View {
     @State private var isSignUp = false
     @State private var showForgotPassword = false
     
-    // Use adaptive colors
-    @Environment(\.colorScheme) var colorScheme // Detect color scheme
+    // Use neumorphic colors
+    private let primaryColor = Color.blue // Keep for interactive elements
+    private let neumorphicTextColor = Color(hex: "0D2750").opacity(0.8)
     
-    private var neumorphicTextColor: Color {
-        // Example: Use primary for text, adapt if needed
-        .primary 
-    }
-    private var primaryButtonColor: Color {
-        .accentColor // Use the app's accent color
-    }
-    private var secondaryTextColor: Color {
-        .secondary
-    }
-
     var body: some View {
         NavigationView {
             ZStack {
-                // Adaptive Background (Using system background)
-                Color(UIColor.systemBackground).edgesIgnoringSafeArea(.all)
+                // Neumorphic Background
+                neumorphicBackgroundColor.edgesIgnoringSafeArea(.all)
                 
                 ScrollView {
-                    VStack(spacing: 20) { 
-                        // App Logo / Header
+                    VStack(spacing: 20) { // Reduced spacing from 30 to 20
+                        // App Logo / Header (Neumorphic Style)
                         VStack(spacing: 10) {
                             Image(systemName: "chart.bar.doc.horizontal")
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 80, height: 80)
-                                .foregroundColor(.accentColor) // Use accent color
+                                .foregroundColor(primaryColor)
                                 .padding(20)
                                 .background(
                                     Circle()
-                                        .fill(Color(UIColor.systemBackground)) // Adaptive fill
-                                        // Replace neumorphic shadows with simpler adaptive shadow
-                                        .shadow(color: Color.primary.opacity(0.1), radius: 5, x: 0, y: 2)
+                                        .fill(neumorphicBackgroundColor)
+                                        .shadow(color: darkDropShadowColor, radius: 5, x: 5, y: 5)
+                                        .shadow(color: lightDropShadowColor, radius: 5, x: -5, y: -5)
                                 )
                             
                             Text("OneTracker")
                                 .font(.largeTitle)
                                 .fontWeight(.bold)
-                                .foregroundColor(.primary) // Use primary text color
+                                .foregroundColor(neumorphicTextColor)
                             
                             Text(isSignUp ? "Create your account" : "Sign in to continue")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
-                        .padding(.top, 30)
+                        .padding(.top, 30) // Reduced top padding from 40 to 30
                         
-                        // Error Message (Uses adaptive colors already)
+                        // Error Message (if any)
                         if let errorMessage = viewModel.errorMessage, !errorMessage.isEmpty {
                             ErrorMessageView(error: errorMessage)
-                                .padding(.bottom, 5)
+                                .padding(.bottom, 5) // Add slight bottom padding
                         }
                         
-                        // Form Fields (Will use adaptive styles from AuthUIComponents)
-                        VStack(spacing: 10) { 
+                        // Form Fields (Neumorphic Text Fields)
+                        VStack(spacing: -10) { // Further reduced spacing from 15 to 10
                             AuthTextField(
                                 placeholder: "Email",
                                 text: $email,
                                 keyboardType: .emailAddress,
                                 icon: "envelope.fill"
                             )
-                            // Removed NeumorphicInnerShadow modifier
+                            .modifier(NeumorphicInnerShadow()) // Keep inner shadow
                             
                             AuthTextField(
                                 placeholder: "Password",
@@ -79,7 +69,7 @@ struct AuthView: View {
                                 isSecure: true,
                                 icon: "lock.fill"
                             )
-                            // Removed NeumorphicInnerShadow modifier
+                            .modifier(NeumorphicInnerShadow()) // Keep inner shadow
                             
                             if isSignUp {
                                 AuthTextField(
@@ -88,8 +78,8 @@ struct AuthView: View {
                                     isSecure: true,
                                     icon: "lock.fill"
                                 )
-                                // Removed NeumorphicInnerShadow modifier
-                                .padding(.bottom, 5)
+                                .modifier(NeumorphicInnerShadow()) // Keep inner shadow
+                                .padding(.bottom, 5) // Add a small gap before Forgot Password when signing up
                             }
                             
                             // Forgot Password Link
@@ -100,13 +90,14 @@ struct AuthView: View {
                                         showForgotPassword = true
                                     }
                                     .font(.footnote)
-                                    .foregroundColor(.accentColor) // Use accent color
+                                    .foregroundColor(primaryColor)
                                 }
                                 .padding(.top, 5)
+                                .padding(.trailing, 15) // Add explicit right padding to match field's internal padding
                             }
                         }
                         
-                        // Sign In/Sign Up Button (Will use adaptive styles from AuthUIComponents)
+                        // Sign In/Sign Up Button (Neumorphic Style)
                         PrimaryButton(
                             title: isSignUp ? "Create Account" : "Sign In",
                             action: {
@@ -123,18 +114,18 @@ struct AuthView: View {
                                 }
                             },
                             isLoading: viewModel.isLoading,
-                            backgroundColor: .accentColor // Use accent color
+                            backgroundColor: primaryColor // Keep primary color
                         )
-                        // Removed neumorphicDropShadow modifier
-                        .padding(.top, 15)
+                        .neumorphicDropShadow()
+                        .padding(.top, 15) // Add slight top padding
                         
-                        // Separator (Uses adaptive colors already)
+                        // Separator
                         TextDivider(text: "OR")
-                            .padding(.vertical, 10)
+                            .padding(.vertical, 10) // Add some vertical padding
                         
                         // Social Sign-in Options
                         VStack(spacing: 15) {
-                            // Apple Sign In (Uses system style which is adaptive)
+                            // Apple Sign In (Neumorphic)
                             AppleSignInButton { result in
                                 switch result {
                                 case .success(let authorization):
@@ -146,7 +137,7 @@ struct AuthView: View {
                                 }
                             }
                             .frame(height: 50)
-                            // Removed neumorphicDropShadow modifier
+                            .neumorphicDropShadow()
                             
                             // Skip Authentication Button
                             Button(action: {
@@ -158,10 +149,10 @@ struct AuthView: View {
                             }) {
                                 Text("Skip Sign In")
                                     .fontWeight(.medium)
-                                    .foregroundColor(.secondary) // Use secondary text color
+                                    .foregroundColor(.secondary)
                                     .padding(.vertical, 10)
                             }
-                            .padding(.top, 0)
+                            .padding(.top, 0) // Reduced top padding from 5 to 0
                         }
                         
                         // Toggle between Sign In and Sign Up
@@ -175,19 +166,19 @@ struct AuthView: View {
                                     clearFields()
                                 }
                             }
-                            .foregroundColor(.accentColor) // Use accent color
+                            .foregroundColor(primaryColor)
                             .fontWeight(.bold)
                         }
-                        .padding(.top, 15)
+                        .padding(.top, 15) // Adjusted top padding
                     }
                     .padding(.horizontal, 25)
-                    .padding(.bottom, 30)
+                    .padding(.bottom, 30) // Reduced bottom padding
                 }
             }
             .navigationBarHidden(true)
             .sheet(isPresented: $showForgotPassword) {
                 ForgotPasswordView(viewModel: viewModel)
-                     .background(Color(UIColor.systemBackground).edgesIgnoringSafeArea(.all)) // Adaptive background
+                     .background(neumorphicBackgroundColor.edgesIgnoringSafeArea(.all)) // Background for sheet
             }
         }
     }
@@ -318,5 +309,41 @@ struct ForgotPasswordView: View {
     }
 }
 
-// --- REMOVE ALL Neumorphic Modifiers and Extensions Below ---
-// (These should not be here) 
+// --- REMOVE Neumorphic View Modifiers Below --- 
+// They should live in Utilities/NeumorphismStyles.swift
+
+struct NeumorphicInnerShadow: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(15)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(neumorphicBackgroundColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(neumorphicBackgroundColor, lineWidth: 4) // Create inset effect
+                            .shadow(color: darkInnerShadowColor, radius: darkInnerShadowBlur / 2, x: darkInnerShadowX / 2, y: darkInnerShadowY / 2)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .shadow(color: lightInnerShadowColor, radius: lightInnerShadowBlur / 2, x: lightInnerShadowX / 2, y: lightInnerShadowY / 2)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    )
+            )
+    }
+}
+
+struct NeumorphicDropShadow: ViewModifier {
+     func body(content: Content) -> some View {
+         content
+             .shadow(color: darkDropShadowColor, radius: darkDropShadowBlur / 2, x: darkDropShadowX / 2, y: darkDropShadowY / 2)
+             .shadow(color: lightDropShadowColor, radius: lightDropShadowBlur / 2, x: lightDropShadowX / 2, y: lightDropShadowY / 2)
+     }
+}
+
+extension View {
+    func neumorphicInnerShadow() -> some View {
+        self.modifier(NeumorphicInnerShadow())
+    }
+    func neumorphicDropShadow() -> some View {
+         self.modifier(NeumorphicDropShadow())
+     }
+} 

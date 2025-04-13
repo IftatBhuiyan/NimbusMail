@@ -19,20 +19,18 @@ class UserViewModel: ObservableObject {
     init() {
         // Subscribe to authentication state changes
         authService.$isUserAuthenticated
-            .receive(on: DispatchQueue.main)
             .assign(to: \.isAuthenticated, on: self)
             .store(in: &cancellables)
         
         // Subscribe to current user changes
         authService.$currentUser
-            .receive(on: DispatchQueue.main)
             .sink { [weak self] user in
                 self?.userEmail = user?.email
                 self?.userName = user?.displayName
             }
             .store(in: &cancellables)
         
-        // Initial check on main thread (already correct because init is on main actor)
+        // Check current auth state
         isAuthenticated = Auth.auth().currentUser != nil
         userEmail = Auth.auth().currentUser?.email
         userName = Auth.auth().currentUser?.displayName
@@ -46,12 +44,11 @@ class UserViewModel: ObservableObject {
         
         do {
             try await authService.signInWithEmail(email: email, password: password)
+            isLoading = false
         } catch let error as AuthError {
             handleError(error)
         } catch {
             handleError(AuthError.unknown(message: error.localizedDescription))
-        }
-        if errorMessage == nil {
         }
     }
     
@@ -61,6 +58,7 @@ class UserViewModel: ObservableObject {
         
         do {
             try await authService.signUpWithEmail(email: email, password: password)
+            isLoading = false
         } catch let error as AuthError {
             handleError(error)
         } catch {
@@ -69,6 +67,8 @@ class UserViewModel: ObservableObject {
     }
     
     func signOut() {
+        errorMessage = nil
+        
         do {
             try authService.signOut()
         } catch let error as AuthError {
@@ -100,6 +100,7 @@ class UserViewModel: ObservableObject {
         
         do {
             try await authService.signInWithApple(authorization: authorization)
+            isLoading = false
         } catch let error as AuthError {
             handleError(error)
         } catch {
@@ -110,10 +111,14 @@ class UserViewModel: ObservableObject {
     // MARK: - Skip Authentication
     
     func handleSkipAuthentication() async {
+        // Reset any errors and loading state
         errorMessage = nil
         isLoading = false
         
+        // Set the authentication state to allow access
         self.isAuthenticated = true
+        
+        // You can set default user information for guest users if needed
         self.userEmail = "guest@example.com"
         self.userName = "Guest User"
     }

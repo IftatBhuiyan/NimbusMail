@@ -17,21 +17,19 @@ struct AuthTextField: View {
                 Image(systemName: icon)
                     .foregroundColor(.secondary)
                     .frame(width: 20)
-                    .padding(.leading, 12)
+                    .padding(.leading, 8)
             }
             
             if isSecure && !isShowingPassword {
                 SecureField(placeholder, text: text)
                     .keyboardType(keyboardType)
                     .autocapitalization(autocapitalization)
-                    .padding(.vertical, 15)
-                    .padding(.leading, icon == nil ? 15 : 0)
+                    .padding(15)
             } else {
                 TextField(placeholder, text: text)
                     .keyboardType(keyboardType)
                     .autocapitalization(autocapitalization)
-                    .padding(.vertical, 15)
-                    .padding(.leading, icon == nil ? 15 : 0)
+                    .padding(15)
             }
             
             if isSecure {
@@ -41,13 +39,13 @@ struct AuthTextField: View {
                     Image(systemName: isShowingPassword ? "eye.slash.fill" : "eye.fill")
                         .foregroundColor(.secondary)
                 }
-                .padding(.trailing, 12)
+                .padding(.trailing, 8)
             }
         }
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color(UIColor.secondarySystemBackground))
-                .shadow(color: Color.primary.opacity(0.1), radius: 3, x: 0, y: 1)
+                .fill(Color(UIColor.systemBackground))
+                .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
         )
     }
 }
@@ -57,7 +55,7 @@ struct PrimaryButton: View {
     var title: String
     var action: () -> Void
     var isLoading: Bool = false
-    var backgroundColor: Color = .accentColor
+    var backgroundColor: Color = Color.blue
     
     var body: some View {
         Button(action: action) {
@@ -68,7 +66,6 @@ struct PrimaryButton: View {
                 } else {
                     Text(title)
                         .font(.headline)
-                        .fontWeight(.medium)
                         .foregroundColor(.white)
                         .padding(.vertical, 15)
                         .frame(maxWidth: .infinity)
@@ -77,7 +74,6 @@ struct PrimaryButton: View {
         }
         .background(backgroundColor)
         .cornerRadius(10)
-        .shadow(color: backgroundColor.opacity(0.3), radius: 5, x: 0, y: 3)
         .disabled(isLoading)
     }
 }

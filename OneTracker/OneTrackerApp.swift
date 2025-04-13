@@ -43,6 +43,7 @@ struct OneTrackerApp: App {
             AuthWrapper()
                 .modelContainer(sharedModelContainer)
                 .withErrorHandling() // Add global error handling if needed
+                .preferredColorScheme(.light) // Force light mode
         }
     }
 }

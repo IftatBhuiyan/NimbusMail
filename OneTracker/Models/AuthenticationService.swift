@@ -32,11 +32,8 @@ class AuthenticationService: NSObject {
         super.init()
         // Listen for auth state changes
         authStateHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
-            // Ensure updates happen on the main thread
-            Task { @MainActor [weak self] in
-                self?.isUserAuthenticated = user != nil
-                self?.currentUser = user
-            }
+            self?.isUserAuthenticated = user != nil
+            self?.currentUser = user
         }
     }
     
@@ -52,11 +49,8 @@ class AuthenticationService: NSObject {
     func signInWithEmail(email: String, password: String) async throws {
         do {
             let result = try await Auth.auth().signIn(withEmail: email, password: password)
-            // Ensure updates happen on the main thread
-            Task { @MainActor [weak self] in
-                self?.currentUser = result.user
-                self?.isUserAuthenticated = true
-            }
+            self.currentUser = result.user
+            self.isUserAuthenticated = true
         } catch {
             throw AuthError.signInError(message: error.localizedDescription)
         }
@@ -65,11 +59,8 @@ class AuthenticationService: NSObject {
     func signUpWithEmail(email: String, password: String) async throws {
         do {
             let result = try await Auth.auth().createUser(withEmail: email, password: password)
-            // Ensure updates happen on the main thread
-            Task { @MainActor [weak self] in
-                self?.currentUser = result.user
-                self?.isUserAuthenticated = true
-            }
+            self.currentUser = result.user
+            self.isUserAuthenticated = true
         } catch {
             throw AuthError.signUpError(message: error.localizedDescription)
         }
@@ -116,25 +107,18 @@ class AuthenticationService: NSObject {
         do {
             // Sign in with Firebase
             let result = try await Auth.auth().signIn(with: credential)
+            self.currentUser = result.user
+            self.isUserAuthenticated = true
             
             // Update user profile with name if available (usually only on first sign-in)
-            var profileUpdated = false
-            if let fullName = appleIDCredential.fullName, let user = result.user {
+            if let fullName = appleIDCredential.fullName, let user = Auth.auth().currentUser {
                 let displayName = "\(fullName.givenName ?? "") \(fullName.familyName ?? "")"
                 if !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     let changeRequest = user.createProfileChangeRequest()
                     changeRequest.displayName = displayName
                     try await changeRequest.commitChanges()
-                    profileUpdated = true
                 }
             }
-
-            // Ensure updates happen on the main thread
-            Task { @MainActor [weak self] in
-                self?.currentUser = result.user // Use result.user as it's guaranteed non-nil here
-                self?.isUserAuthenticated = true
-            }
-
         } catch {
             throw AuthError.signInError(message: error.localizedDescription)
         }
@@ -145,11 +129,8 @@ class AuthenticationService: NSObject {
     func signOut() throws {
         do {
             try Auth.auth().signOut()
-            // Ensure updates happen on the main thread
-            Task { @MainActor [weak self] in
-                self?.currentUser = nil
-                self?.isUserAuthenticated = false
-            }
+            self.currentUser = nil
+            self.isUserAuthenticated = false
         } catch {
             throw AuthError.signOutError(message: error.localizedDescription)
         }
@@ -161,11 +142,10 @@ class AuthenticationService: NSObject {
         // Set as anonymous or guest user
         UserDefaults.standard.set(true, forKey: "didSkipAuthentication")
         
-        // Ensure updates happen on the main thread
-        Task { @MainActor [weak self] in
-            self?.isUserAuthenticated = false
-            self?.currentUser = nil
-        }
+        // We'll keep isUserAuthenticated as false since they're not actually authenticated
+        // but the app can check this flag to allow access
+        self.isUserAuthenticated = false
+        self.currentUser = nil
         
         // You can post a notification to inform the UI that the user has skipped auth
         NotificationCenter.default.post(name: NSNotification.Name("DidSkipAuthentication"), object: nil)
