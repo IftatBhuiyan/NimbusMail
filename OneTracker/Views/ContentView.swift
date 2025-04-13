@@ -339,14 +339,15 @@ struct FloatingActionButton: View {
 // Preview Provider - Needs updating if you want previews for the new structure
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try! ModelContainer(for: Transaction.self, configurations: config)
+        // Remove SwiftData container setup as it's no longer needed for previews here
+        // let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        // let container = try! ModelContainer(for: Transaction.self, configurations: config)
 
         let userViewModel = UserViewModel()
         userViewModel.isAuthenticated = true
 
         return ContentView()
-            .modelContainer(container)
+            // .modelContainer(container) // Remove container injection
             .environmentObject(userViewModel)
     }
 }

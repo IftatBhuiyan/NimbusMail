@@ -25,10 +25,8 @@ struct OneTrackerApp: App {
     
     // Re-add the sharedModelContainer
     var sharedModelContainer: ModelContainer = {
-        // Include Transaction in the schema
-        let schema = Schema([
-            Transaction.self,
-        ])
+        // Schema is now empty as Transaction is removed
+        let schema = Schema([])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
         do {
