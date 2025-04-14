@@ -1,0 +1,32 @@
+{
+  "configurations" : [
+    {
+      "id" : "8F8BD2C9-554E-40EE-82D3-86CE3658E9D5",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:OneTracker.xcodeproj",
+        "identifier" : "3B2C5D4C2DA6282B009C50AA",
+        "name" : "OneTrackerTests"
+      }
+    },
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:OneTracker.xcodeproj",
+        "identifier" : "3B2C5D562DA6282B009C50AA",
+        "name" : "OneTrackerUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

@@ -12,6 +12,9 @@ import SwiftData
 struct EmailDisplayData: Identifiable, Hashable {
     let id = UUID()
     let gmailMessageId: String // Actual ID from Gmail API
+    let threadId: String? // Gmail thread ID
+    let messageIdHeader: String? // Value of the Message-ID header
+    let referencesHeader: String? // Value of the References header
     let sender: String // Name for Inbox view
     let senderEmail: String? // Full email for Detail view
     let recipient: String?
@@ -20,7 +23,7 @@ struct EmailDisplayData: Identifiable, Hashable {
     let body: String
     let date: Date
     var isRead: Bool = false
-    let previousMessages: [EmailDisplayData]?
+    var previousMessages: [EmailDisplayData]?
     
     // Custom hash function if needed, especially if previousMessages is added
     func hash(into hasher: inout Hasher) {
@@ -42,6 +45,8 @@ struct ContentView: View {
     @State private var searchText = ""
     @State private var isSideMenuShowing = false // State for side menu
     @State private var showingAddAccountSheet = false // State for Add Account sheet
+    @FocusState private var isSearchFieldFocused: Bool // Add FocusState for search field
+    @State private var composeMode: ComposeMode? = nil // State to trigger compose sheet
 
     // Remove local mock emails - use viewModel.inboxEmails instead
     // @State private var mockEmails: [MockEmail] = [...] 
@@ -62,10 +67,10 @@ struct ContentView: View {
     private func emailContainsText(_ email: EmailDisplayData, _ text: String) -> Bool {
         let lowercasedText = text.localizedLowercase
         
-        // Check current email fields
+        // Check current email fields (sender, subject, and snippet)
         if email.sender.localizedLowercase.contains(lowercasedText) ||
            email.subject.localizedLowercase.contains(lowercasedText) ||
-           email.body.localizedLowercase.contains(lowercasedText) {
+           email.snippet.localizedLowercase.contains(lowercasedText) {
             return true
         }
         
@@ -98,18 +103,35 @@ struct ContentView: View {
                     neumorphicBackgroundColor.edgesIgnoringSafeArea(.all)
 
                     VStack(spacing: 0) {
-                        // Header HStack
+                        // Header HStack - Restructured
                         HStack {
+                            // Hamburger Menu (Only shown when search is NOT active)
+                            if !isSearchActive {
+                                Button {
+                                    withAnimation(.easeInOut) {
+                                        isSideMenuShowing.toggle()
+                                    }
+                                } label: {
+                                    Image(systemName: "line.3.horizontal")
+                                        .font(.title2)
+                                        .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                                }
+                                .frame(width: 44, height: 44)
+                                .transition(.opacity) // Add transition
+                            }
+                            
+                            Spacer()
+                            
+                            // Content Area (Title or Search Bar)
                             if isSearchActive {
+                                // Search Bar HStack
                                 HStack {
                                     Image(systemName: "magnifyingglass")
                                         .foregroundColor(.secondary)
-                                    TextField("Search Mail", text: $searchText)
-                                        .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-                                        .accentColor(Color.blue)
-                                        .autocapitalization(.none)
-                                        .disableAutocorrection(true)
-                                        
+                                    TextField("Search", text: $searchText)
+                                        .autocorrectionDisabled()
+                                        .textInputAutocapitalization(.never)
+                                        .focused($isSearchFieldFocused)
                                     if !searchText.isEmpty {
                                         Button {
                                             searchText = ""
@@ -119,51 +141,42 @@ struct ContentView: View {
                                         }
                                     }
                                 }
-                                .modifier(NeumorphicInnerShadow())
-                                
-                                Button("Cancel") {
-                                    withAnimation {
-                                        isSearchActive = false
-                                        searchText = ""
-                                    }
-                                }
-                                .foregroundColor(.blue)
-                                .padding(.leading, 8)
-                                
+                                .padding(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
+                                .background(neumorphicBackgroundStyle())
+                                .transition(.move(edge: .leading).combined(with: .opacity)) // Adjust transition
                             } else {
-                                // Hamburger Menu Button
-                                Button {
-                                    withAnimation(.easeInOut) {
-                                        isSideMenuShowing.toggle()
-                                    }
-                                } label: {
-                                    Image(systemName: "line.3.horizontal") // Hamburger icon
-                                        .font(.title2)
-                                        .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-                                }
-                                .frame(width: 44, height: 44)
-                                
-                                Spacer()
-                                
+                                // Inbox Title (Only shown when search is NOT active)
                                 Text("Inbox")
                                     .font(.largeTitle)
                                     .fontWeight(.bold)
                                     .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-
-                                Spacer()
-
-                                // Search Button (Re-add)
-                                Button {
-                                    withAnimation {
-                                        isSearchActive = true
-                                    }
-                                } label: {
-                                    Image(systemName: "magnifyingglass")
-                                        .font(.title2)
-                                        .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-                                }
-                                 .frame(width: 44, height: 44)
+                                    .transition(.opacity) // Add transition
                             }
+
+                            Spacer()
+
+                            // Search Activation/Deactivation Button (Always visible)
+                            Button {
+                                withAnimation {
+                                    // If search is currently active, unfocus before toggling
+                                    if isSearchActive {
+                                        isSearchFieldFocused = false
+                                    }
+                                    isSearchActive.toggle()
+                                    if isSearchActive {
+                                         searchText = "" // Clear text when activating
+                                         // Delay focus slightly after animation starts
+                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                             isSearchFieldFocused = true 
+                                         }
+                                     }
+                                }
+                            } label: {
+                                Image(systemName: isSearchActive ? "xmark" : "magnifyingglass")
+                                    .font(.title2)
+                                    .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                            }
+                             .frame(width: 44, height: 44)
                         }
                         .padding(.horizontal)
                         .padding(.top)
@@ -208,6 +221,7 @@ struct ContentView: View {
                     // Floating Action Button
                     FloatingActionButton {
                         print("Compose Email Tapped")
+                        composeMode = .new // Set the compose mode to trigger the sheet
                     }
                     .padding()
                 }
@@ -249,6 +263,12 @@ struct ContentView: View {
             // Placeholder for AddAccountProviderView
             AddAccountProviderView()
                 .environmentObject(viewModel)
+        }
+        // Add sheet modifier for ComposeEmailView
+        .sheet(item: $composeMode) { mode in
+            ComposeEmailView(mode: mode)
+                 .environmentObject(viewModel)
+                 .background(neumorphicBackgroundColor.edgesIgnoringSafeArea(.all))
         }
         .environmentObject(viewModel)
     }
@@ -343,8 +363,8 @@ struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
         // Add preview emails to the preview view model
         let previewEmails = [
-            EmailDisplayData(gmailMessageId: "preview1", sender: "Alice Preview", senderEmail: "a@p.com", recipient: "Me", subject: "Preview Email 1", snippet: "Snip 1", body: "Body 1", date: Date(), isRead: false, previousMessages: nil),
-            EmailDisplayData(gmailMessageId: "preview2", sender: "Bob Preview", senderEmail: "b@p.com", recipient: "Me", subject: "Preview Email 2", snippet: "Snip 2", body: "Body 2", date: Date(), isRead: true, previousMessages: nil)
+            EmailDisplayData(gmailMessageId: "preview1", threadId: nil, messageIdHeader: nil, referencesHeader: nil, sender: "Alice Preview", senderEmail: "a@p.com", recipient: "Me", subject: "Preview Email 1", snippet: "Snip 1", body: "Body 1", date: Date(), isRead: false, previousMessages: nil),
+            EmailDisplayData(gmailMessageId: "preview2", threadId: nil, messageIdHeader: nil, referencesHeader: nil, sender: "Bob Preview", senderEmail: "b@p.com", recipient: "Me", subject: "Preview Email 2", snippet: "Snip 2", body: "Body 2", date: Date(), isRead: true, previousMessages: nil)
         ]
         // Rename mockViewModel if desired, but keep for now for clarity of purpose
         let mockViewModel = UserViewModel(isAuthenticated: true, 

@@ -132,73 +132,136 @@ class GmailAPIService {
         // --- End Placeholder --- 
     }
     
-    // MARK: - Fetching Messages (Manual Pagination)
-    
-    // Fetches inbox message IDs, handling pagination manually, up to a specified limit.
-    func fetchInboxMessages(for account: EmailAccount, maxTotalMessages: Int = 100, completion: @escaping (Result<[GTLRGmail_Message], Error>) -> Void) {
-        print("Attempting to fetch up to \(maxTotalMessages) inbox messages for \(account.emailAddress) with manual pagination")
+    // MARK: - Fetching Threads (Replaces fetchInboxMessages)
+
+    // Fetches inbox thread IDs and details, handling pagination.
+    func fetchInboxThreads(for account: EmailAccount, maxTotalThreads: Int = 50, completion: @escaping (Result<[GTLRGmail_Thread], Error>) -> Void) {
+        print("Attempting to fetch up to \(maxTotalThreads) inbox threads for \(account.emailAddress)")
         
-        var allMessages: [GTLRGmail_Message] = []
+        var allThreads: [GTLRGmail_Thread] = []
         var currentPageToken: String? = nil
-        let maxResultsPerPage: UInt = 500 // Use API max
+        let maxResultsPerPage: UInt = 100 // Adjust as needed, API max is higher but impacts performance
 
-        // Recursive helper function to fetch pages
-        func fetchPage(authorizer: GTMSessionFetcherAuthorizer) {
-            let query = GTLRGmailQuery_UsersMessagesList.query(withUserId: "me")
-            query.labelIds = ["INBOX"]
-            query.maxResults = maxResultsPerPage
-            query.pageToken = currentPageToken // Set page token if available
+        // Recursive helper function to fetch thread list pages
+        func fetchListPage(authorizer: GTMSessionFetcherAuthorizer) {
+            let listQuery = GTLRGmailQuery_UsersThreadsList.query(withUserId: "me")
+            listQuery.labelIds = ["INBOX"] // Fetch threads with at least one message in INBOX
+            listQuery.maxResults = maxResultsPerPage
+            listQuery.pageToken = currentPageToken
             
-            self.service.authorizer = authorizer // Ensure authorizer is set for each call
+            self.service.authorizer = authorizer
+            print("Fetching thread list page with token: \(currentPageToken ?? "nil")")
 
-            print("Fetching page with token: \(currentPageToken ?? "nil")")
-
-            self.service.executeQuery(query) { (ticket, response, error) in
+            self.service.executeQuery(listQuery) { [weak self] (ticket, response, error) in
+                guard let self = self else { return }
+                
                 if let error = error {
-                    print("Error fetching message page: \(error.localizedDescription)")
+                    print("Error fetching thread list page: \(error.localizedDescription)")
                     completion(.failure(error))
                     return
                 }
 
-                guard let listResponse = response as? GTLRGmail_ListMessagesResponse else {
-                    print("Error: Could not parse message list response.")
-                    completion(.failure(NSError(domain: "GmailAPIService", code: -5, userInfo: [NSLocalizedDescriptionKey: "Invalid message list response"])))
+                guard let listResponse = response as? GTLRGmail_ListThreadsResponse else {
+                    print("Error: Could not parse thread list response.")
+                    completion(.failure(NSError(domain: "GmailAPIService", code: -10, userInfo: [NSLocalizedDescriptionKey: "Invalid thread list response"])))
                     return
                 }
 
-                // Append messages from the current page
-                if let messages = listResponse.messages {
-                    allMessages.append(contentsOf: messages)
-                    print("Fetched \(messages.count) message IDs on this page. Total collected: \(allMessages.count)")
-                } else {
-                     print("No messages on this page.")
+                // Get thread IDs from the current page
+                let threadInfos = listResponse.threads ?? []
+                print("Fetched \(threadInfos.count) thread infos on this page.")
+                
+                // --- Fetch Full Thread Details Concurrently --- 
+                self.fetchFullThreads(for: account, threadInfos: threadInfos, authorizer: authorizer) { result in
+                    switch result {
+                    case .success(let fetchedThreads):
+                        allThreads.append(contentsOf: fetchedThreads)
+                        print("Fetched details for \(fetchedThreads.count) threads. Total collected: \(allThreads.count)")
+                        
+                        // Check for next page token AND if we've reached the desired limit
+                        if let nextToken = listResponse.nextPageToken, !nextToken.isEmpty, allThreads.count < maxTotalThreads {
+                            currentPageToken = nextToken
+                            // Fetch the next list page recursively
+                            fetchListPage(authorizer: authorizer) 
+                        } else {
+                            // No more pages or reached limit - complete successfully
+                            print("Finished fetching thread pages (or reached limit of \(maxTotalThreads)). Total threads collected: \(allThreads.count)")
+                            completion(.success(Array(allThreads.prefix(maxTotalThreads))))
+                        }
+                        
+                    case .failure(let detailError):
+                        // If fetching details fails for a batch, report the error and stop.
+                        print("Error fetching full thread details: \(detailError.localizedDescription)")
+                        completion(.failure(detailError))
+                    }
                 }
-
-                // Check for the next page token AND if we've reached the desired limit
-                if let nextToken = listResponse.nextPageToken, !nextToken.isEmpty, allMessages.count < maxTotalMessages {
-                    currentPageToken = nextToken
-                    // Fetch the next page recursively
-                    fetchPage(authorizer: authorizer) 
-                } else {
-                    // No more pages, reached limit, or error - complete successfully
-                    print("Finished fetching pages (or reached limit of \(maxTotalMessages)). Total message IDs collected: \(allMessages.count)")
-                    // Return only up to the maxTotalMessages requested
-                    completion(.success(Array(allMessages.prefix(maxTotalMessages))))
-                }
+                // --- End Concurrent Fetch ---
             }
         }
 
         // Start the process by getting the authorizer
         getAuthorizer(for: account.emailAddress) { [weak self] result in
             guard self != nil else { return }
-            
             switch result {
             case .success(let authorizer):
-                // Start fetching the first page
-                fetchPage(authorizer: authorizer)
+                fetchListPage(authorizer: authorizer)
             case .failure(let error):
-                print("Failed to get authorizer for fetching messages: \(error.localizedDescription)")
+                print("Failed to get authorizer for fetching threads: \(error.localizedDescription)")
                 completion(.failure(error))
+            }
+        }
+    }
+    
+    // Helper to fetch full details for multiple threads concurrently
+    private func fetchFullThreads(for account: EmailAccount, threadInfos: [GTLRGmail_Thread], authorizer: GTMSessionFetcherAuthorizer, completion: @escaping (Result<[GTLRGmail_Thread], Error>) -> Void) {
+        guard !threadInfos.isEmpty else {
+            completion(.success([]))
+            return
+        }
+        
+        var fetchedThreads: [GTLRGmail_Thread] = []
+        let group = DispatchGroup()
+        var firstError: Error? = nil
+
+        for info in threadInfos {
+            guard let threadId = info.identifier else { continue }
+            group.enter()
+            
+            // Use the existing authorizer
+            self.service.authorizer = authorizer 
+            
+            let query = GTLRGmailQuery_UsersThreadsGet.query(withUserId: "me", identifier: threadId)
+            // Request headers needed for mapping and replying
+            query.format = "metadata"
+            query.metadataHeaders = ["Subject", "From", "Date", "To", "Cc", "Bcc", "Message-ID", "References"]
+            
+            self.service.executeQuery(query) { (ticket, response, error) in
+                if let error = error {
+                    print("Error fetching details for thread \(threadId): \(error.localizedDescription)")
+                    // Store the first error encountered
+                    if firstError == nil { firstError = error }
+                } else if let thread = response as? GTLRGmail_Thread {
+                     // Check if thread actually contains messages before adding
+                     if let messages = thread.messages, !messages.isEmpty {
+                         fetchedThreads.append(thread)
+                     } else {
+                         print("Thread \(threadId) fetched but contained no messages (or messages couldn't be parsed), skipping.")
+                     }
+                } else {
+                    print("Error: Could not parse thread details response for \(threadId).")
+                    if firstError == nil {
+                         firstError = NSError(domain: "GmailAPIService", code: -11, userInfo: [NSLocalizedDescriptionKey: "Invalid thread details response for \(threadId)"])
+                     }
+                }
+                group.leave()
+            }
+        }
+
+        group.notify(queue: .main) {
+            if let error = firstError {
+                completion(.failure(error))
+            } else {
+                completion(.success(fetchedThreads))
             }
         }
     }
@@ -218,7 +281,7 @@ class GmailAPIService {
                 // Query to get specific metadata fields
                 let query = GTLRGmailQuery_UsersMessagesGet.query(withUserId: "me", identifier: messageId)
                 query.format = "metadata" // Fetch metadata only (headers, snippet)
-                query.metadataHeaders = ["Subject", "From", "Date", "To", "Cc", "Bcc"] // Specify needed headers
+                query.metadataHeaders = ["Subject", "From", "Date", "To", "Cc", "Bcc", "Message-ID", "References"] // Specify needed headers, including Message-ID and References
                 
                 self.service.executeQuery(query) { (ticket, response, error) in
                     if let error = error {
@@ -283,47 +346,228 @@ class GmailAPIService {
         }
     }
 
-    // MARK: - Helper for Body Extraction
-    // Extracts HTML body from a message payload, falling back to plain text.
-    static func extractBestBody(from message: GTLRGmail_Message) -> String? {
-        guard let payload = message.payload else { return nil }
-        // Prioritize HTML
-        if let htmlBody = findBody(in: payload, mimeType: "text/html") {
-            return htmlBody
+    // MARK: - Helper for Body Extraction (Revised)
+    // Extracts the best possible body content (HTML preferred) from a message payload,
+    // attempting to separate the reply from the quoted text.
+    static func extractBestBodyParts(from message: GTLRGmail_Message) -> (reply: String?, quote: String?) {
+        guard let payload = message.payload else { return (nil, nil) }
+        
+        let rawBody = findBestBodyRecursive(in: payload)
+        guard let bodyString = rawBody else { return (nil, nil) }
+        
+        return parseBodyStringForReplyAndQuote(bodyString)
+    }
+    
+    // Updated helper to parse a body string (HTML or plain) into reply and quote
+    static func parseBodyStringForReplyAndQuote(_ bodyString: String) -> (reply: String?, quote: String?) {
+        // --- HTML Parsing Attempt --- 
+        // Look for the standard blockquote used by Gmail for replies
+        if let quoteRange = bodyString.range(of: "<blockquote type=\"cite\"", options: [.caseInsensitive]) {
+            let replyPart = String(bodyString[..<quoteRange.lowerBound])
+            let quotePart = String(bodyString[quoteRange.lowerBound...])
+            let cleanedReply = replyPart.trimmingCharacters(in: .whitespacesAndNewlines)
+            return cleanedReply.isEmpty ? (bodyString, nil) : (cleanedReply, quotePart)
         }
-        // Fallback to plain text
-        if let plainBody = findBody(in: payload, mimeType: "text/plain") {
-            return plainBody
+        // Fallback check for the older gmail_quote div (just in case)
+        if let quoteRange = bodyString.range(of: "<div class=\"gmail_quote\">", options: [.caseInsensitive]) {
+            let replyPart = String(bodyString[..<quoteRange.lowerBound])
+            let quotePart = String(bodyString[quoteRange.lowerBound...])
+            let cleanedReply = replyPart.trimmingCharacters(in: .whitespacesAndNewlines)
+            return cleanedReply.isEmpty ? (bodyString, nil) : (cleanedReply, quotePart)
         }
-        // No suitable body found
-        return nil
+        
+        // --- Plain Text Parsing Attempt (or if HTML parsing failed) ---
+        // Check for "On ... wrote:" pattern
+        // More robust regex might be needed for different languages/formats
+        let onDatewroteRegex = try? NSRegularExpression(pattern: "^On .* wrote:\\s*$", options: [.anchorsMatchLines, .caseInsensitive])
+        if let match = onDatewroteRegex?.firstMatch(in: bodyString, options: [], range: NSRange(bodyString.startIndex..., in: bodyString)) {
+            let quoteStartIndex = bodyString.index(bodyString.startIndex, offsetBy: match.range.location)
+            let replyPart = String(bodyString[..<quoteStartIndex])
+            let quotePart = String(bodyString[quoteStartIndex...])
+            let cleanedReply = replyPart.trimmingCharacters(in: .whitespacesAndNewlines)
+            return cleanedReply.isEmpty ? (bodyString, nil) : (cleanedReply, quotePart)
+        }
+        
+        // Check for lines starting with > (common plain text quoting)
+        if let firstQuoteLineRange = bodyString.range(of: "\n>", options: []) {
+            let replyPart = String(bodyString[..<firstQuoteLineRange.lowerBound])
+            let quotePart = String(bodyString[firstQuoteLineRange.lowerBound...]) // Keep the newline
+             let cleanedReply = replyPart.trimmingCharacters(in: .whitespacesAndNewlines)
+             // Return parts only if reply is non-empty, otherwise treat whole as reply
+             return cleanedReply.isEmpty ? (bodyString, nil) : (cleanedReply, quotePart)
+        } else if bodyString.starts(with: ">") {
+             // Handle case where the very first line is quoted
+             return (nil, bodyString)
+        }
+
+        // --- Fallback --- 
+        // If no quote indicators found, assume the whole thing is the reply
+        return (bodyString, nil)
     }
 
-    // Recursive helper to find body content for a specific MIME type
-    private static func findBody(in payload: GTLRGmail_MessagePart, mimeType: String) -> String? {
-        // Check current part
-        if payload.mimeType == mimeType,
-           let bodyData = payload.body?.data,
-           let decodedData = Data(base64URLEncoded: bodyData),
-           let bodyString = String(data: decodedData, encoding: .utf8) {
-            return bodyString
-        }
-
-        // If multipart, recursively search parts
-        if let parts = payload.parts, payload.mimeType?.starts(with: "multipart/") == true {
+    // Recursive helper to find the best body content for display.
+    // Prioritizes HTML within multipart/alternative, then searches recursively.
+    private static func findBestBodyRecursive(in payload: GTLRGmail_MessagePart) -> String? {
+        let mimeType = payload.mimeType?.lowercased() ?? ""
+        
+        // 1. Handle multipart/alternative: Look for HTML first, then plain text
+        if mimeType == "multipart/alternative", let parts = payload.parts {
+            // Prefer HTML
             for part in parts {
-                if let foundBody = findBody(in: part, mimeType: mimeType) {
-                    return foundBody // Return the first match of the desired type
+                if part.mimeType?.lowercased() == "text/html" {
+                    if let htmlBody = decodeBody(from: part) {
+                        return htmlBody
+                    }
+                }
+            }
+            // Fallback to Plain Text
+            for part in parts {
+                 if part.mimeType?.lowercased() == "text/plain" {
+                    if let plainBody = decodeBody(from: part) {
+                         // Optionally wrap plain text in <pre> for basic formatting
+                         return "<pre>\(plainBody)</pre>"
+                    }
                 }
             }
         }
-
-        // MIME type not found in this part or its children
+        
+        // 2. Handle other multipart types: Recurse into parts
+        //    (e.g., multipart/related, multipart/mixed)
+        if mimeType.starts(with: "multipart/"), let parts = payload.parts {
+            for part in parts {
+                // Only recurse into sub-multiparts or text parts
+                // We are looking for the *main* displayable body here, not traversing attachments yet.
+                 if part.mimeType?.lowercased().starts(with: "multipart/") == true ||
+                    part.mimeType?.lowercased().starts(with: "text/") == true {
+                    if let foundBody = findBestBodyRecursive(in: part) {
+                        return foundBody // Return the first suitable body found in sub-parts
+                    }
+                }
+            }
+        }
+        
+        // 3. Handle single text/html part
+        if mimeType == "text/html" {
+            if let htmlBody = decodeBody(from: payload) {
+                return htmlBody
+            }
+        }
+        
+        // 4. Handle single text/plain part (as fallback if no HTML found)
+        if mimeType == "text/plain" {
+            if let plainBody = decodeBody(from: payload) {
+                 // Optionally wrap plain text in <pre> for basic formatting
+                 return "<pre>\(plainBody)</pre>"
+            }
+        }
+        
+        // 5. No suitable body found in this part or its children
         return nil
+    }
+
+    // Helper to decode Base64URL encoded body data from a part
+    private static func decodeBody(from part: GTLRGmail_MessagePart) -> String? {
+         guard let bodyData = part.body?.data,
+               let decodedData = Data(base64URLEncoded: bodyData),
+               let bodyString = String(data: decodedData, encoding: .utf8) else {
+             // Try decoding filename if body data is nil (some clients might do this)
+             // This is less common but worth a try as a fallback
+             if let filename = part.filename, !filename.isEmpty, 
+                let decodedFilename = Data(base64URLEncoded: filename), // Check if filename itself is encoded
+                let filenameString = String(data: decodedFilename, encoding: .utf8) {
+                 print("Warning: Decoding body from filename for part with MIME type \(part.mimeType ?? "unknown")")
+                 return filenameString
+             }
+             return nil // Truly couldn't decode
+         }
+         return bodyString
     }
     
     // MARK: - Other API Methods (Placeholders)
     // func fetchMessageDetails(messageId: String, account: EmailAccount, ...) -> GTLRGmail_Message { ... } // Keep this for list view
+    
+    // MARK: - Send Email
+    
+    func sendEmail(for account: EmailAccount, to: String, cc: String?, bcc: String?, subject: String, body: String, originalEmail: EmailDisplayData? = nil, completion: @escaping (Result<GTLRGmail_Message, Error>) -> Void) {
+        // Use the completion handler pattern for getAuthorizer
+        getAuthorizer(for: account.emailAddress) { [weak self] result in
+            guard let self = self else { return }
+
+            switch result {
+            case .success(let authorizer):
+                self.service.authorizer = authorizer
+                
+                let message = GTLRGmail_Message()
+                
+                // If replying, set the thread ID
+                if let original = originalEmail, let threadId = original.threadId {
+                    message.threadId = threadId
+                }
+                
+                // Construct the raw email string (RFC 822 format)
+                // Generate a unique Message-ID for this new message
+                let newMessageId = "<\(UUID().uuidString)@\(account.emailAddress.split(separator: "@").last ?? "local.host")>"
+                
+                var emailString = "From: \(account.emailAddress)\r\n"
+                emailString += "To: \(to)\r\n"
+                if let cc = cc, !cc.isEmpty {
+                    emailString += "Cc: \(cc)\r\n"
+                }
+                if let bcc = bcc, !bcc.isEmpty {
+                    emailString += "Bcc: \(bcc)\r\n" 
+                }
+                emailString += "Subject: \(subject)\r\n"
+                emailString += "Message-ID: \(newMessageId)\r\n"
+                
+                // Add reply headers if applicable
+                if let original = originalEmail, let originalMessageIdHeader = original.messageIdHeader {
+                    emailString += "In-Reply-To: \(originalMessageIdHeader)\r\n"
+                    // Construct References header: append original Message-ID to existing References (if any)
+                    var references = original.referencesHeader ?? "" // Start with previous references
+                    if !references.isEmpty {
+                        references += " " // Add space separator
+                    }
+                    references += originalMessageIdHeader // Append the ID being replied to
+                    emailString += "References: \(references)\r\n"
+                }
+                
+                emailString += "Content-Type: text/plain; charset=utf-8\r\n"
+                emailString += "Content-Transfer-Encoding: 7bit\r\n\r\n"
+                emailString += body
+                
+                // Base64 URL encode the string
+                guard let emailData = emailString.data(using: .utf8) else {
+                     completion(.failure(NSError(domain: "GmailAPIService", code: -3, userInfo: [NSLocalizedDescriptionKey: "Failed to encode email content."])))
+                    return
+                }
+                message.raw = emailData.base64EncodedString(options: .endLineWithCarriageReturn)
+                                        .replacingOccurrences(of: "+", with: "-")
+                                        .replacingOccurrences(of: "/", with: "_")
+                                        .trimmingCharacters(in: CharacterSet(charactersIn: "="))
+        
+                // Add uploadParameters: nil to the query call
+                let query = GTLRGmailQuery_UsersMessagesSend.query(withObject: message, userId: "me", uploadParameters: nil)
+                
+                print("Sending email... To: \(to), Subject: \(subject)")
+                self.service.executeQuery(query) { (ticket, sentMessage, error) in
+                    if let error = error {
+                        print("Error sending email: \(error.localizedDescription)")
+                        completion(.failure(error))
+                    } else if let sentMessage = sentMessage as? GTLRGmail_Message {
+                        print("Email sent successfully. ID: \(sentMessage.identifier ?? "N/A")")
+                        completion(.success(sentMessage))
+                    } else {
+                        print("Error sending email: Unknown error, no message object returned.")
+                        completion(.failure(NSError(domain: "GmailAPIService", code: -4, userInfo: [NSLocalizedDescriptionKey: "Unknown error sending email."])))
+                    }
+                }
+                
+            case .failure(let error):
+                print("Failed to get authorizer for sending email: \(error.localizedDescription)")
+                completion(.failure(error))
+            }
+        }
+    }
 }
 
 // Helper extension for Base64 URL Decoding (common need with Gmail API)

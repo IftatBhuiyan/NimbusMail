@@ -6,9 +6,18 @@ struct HTMLWebView: UIViewRepresentable {
     @Binding var dynamicHeight: CGFloat // Binding to communicate height back
     
     func makeUIView(context: Context) -> WKWebView {
-        let webView = WKWebView()
+        // WKPreferences related setup removed as javaScriptEnabled is deprecated
+        // and the default WKWebpagePreferences allows JavaScript.
+        
+        let configuration = WKWebViewConfiguration()
+        // If specific webpage preferences were needed, they'd be set here:
+        // let webpagePreferences = WKWebpagePreferences()
+        // webpagePreferences.allowsContentJavaScript = true // Default is true anyway
+        // configuration.defaultWebpagePreferences = webpagePreferences
+        
+        let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator // Handle navigation
-        webView.scrollView.isScrollEnabled = false // Disable internal scrolling
+        webView.scrollView.isScrollEnabled = false // Disable internal scrolling again, outer ScrollView handles it
         webView.isOpaque = false // Allow background color to show through
         webView.backgroundColor = UIColor.clear // Match SwiftUI background
         
@@ -33,8 +42,7 @@ struct HTMLWebView: UIViewRepresentable {
         <style>
             body { 
                 font-family: -apple-system, sans-serif; 
-                padding: 0; /* Remove default padding */
-                margin: 0; 
+                /* Keep basic font, remove padding/margin/overflow overrides */
                 background-color: transparent; 
                 color: #0D2750; /* Match app text color */
             }
@@ -45,17 +53,13 @@ struct HTMLWebView: UIViewRepresentable {
                 max-width: 100%; /* Prevent images from overflowing */
                 height: auto;
             }
-            /* Ensure html and body take full height for accurate scrollHeight */
-            html, body {
-                 height: auto;
-                 overflow: hidden;
-            }
         </style>
         \(htmlString)
         """
         // Reset height before loading new content to avoid stale values
         // self.dynamicHeight = 0 // REMOVED: Avoid modifying state in updateUIView
-        uiView.loadHTMLString(styledHTML, baseURL: nil)
+        // Provide a generic https base URL to potentially help with resource loading
+        uiView.loadHTMLString(styledHTML, baseURL: URL(string: "https://"))
     }
     
     // Coordinator to handle navigation and observe content size
@@ -98,6 +102,16 @@ struct HTMLWebView: UIViewRepresentable {
              }
              decisionHandler(.allow) // Allow other navigation types (initial load)
          }
+         
+         // --- ADDED: Error Handling --- 
+         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+             print("[HTMLWebView Error] Failed provisional navigation: \(error.localizedDescription)")
+         }
+
+         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+             print("[HTMLWebView Error] Failed navigation: \(error.localizedDescription)")
+         }
+         // --- END ADDED: Error Handling ---
          
          // Optional: Cleanup observer when the view is dismantled (though often managed automatically)
          // deinit {

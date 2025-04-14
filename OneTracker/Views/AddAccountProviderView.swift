@@ -105,12 +105,13 @@ struct AddAccountProviderView: View {
 
         let gmailReadOnlyScope = "https://www.googleapis.com/auth/gmail.readonly"
         // Add other scopes like modify or send if needed
-        // let gmailSendScope = "https://www.googleapis.com/auth/gmail.send"
-        
+        let gmailSendScope = "https://www.googleapis.com/auth/gmail.send"
+        let gmailModifyScope = "https://www.googleapis.com/auth/gmail.modify"
+
         GIDSignIn.sharedInstance.signIn(
             withPresenting: presentingViewController,
             hint: nil, // Optional: Email hint if known
-            additionalScopes: [gmailReadOnlyScope]) { signInResult, error in // Add scopes here
+            additionalScopes: [gmailReadOnlyScope, gmailSendScope, gmailModifyScope]) { signInResult, error in
                 
             guard let result = signInResult else {
                 // Handle error
