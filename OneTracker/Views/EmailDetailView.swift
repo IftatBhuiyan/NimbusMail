@@ -1,9 +1,16 @@
 import SwiftUI
 
 struct EmailDetailView: View {
-    let email: MockEmail
+    let email: EmailDisplayData
     @Environment(\.dismiss) var dismiss // To add a back button if needed
     @State private var composeMode: ComposeMode? = nil // State to trigger sheet
+    @EnvironmentObject var viewModel: UserViewModel // Add ViewModel access
+
+    // State for fetched body content
+    @State private var fullBody: String?
+    @State private var isLoadingBody: Bool = false
+    @State private var bodyErrorMessage: String?
+    @State private var webViewHeight: CGFloat = .zero // State for dynamic height
 
     var body: some View {
         ZStack(alignment: .bottom) { // Align ZStack content to the bottom
@@ -59,11 +66,19 @@ struct EmailDetailView: View {
                     
                     // Body Section
                     VStack(alignment: .leading) {
-                        // Display the full email body
-                        Text(email.body)
-                            .font(.body)
-                            .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-                            .lineSpacing(5)
+                        if isLoadingBody {
+                            ProgressView()
+                                .padding()
+                        } else if let errorMsg = bodyErrorMessage {
+                            Text("Error loading content: \(errorMsg)")
+                                .foregroundColor(.red)
+                                .padding()
+                        } else {
+                            // Display the fetched full email body using the web view
+                            HTMLWebView(htmlString: fullBody ?? "<p>Loading body...</p>",
+                                        dynamicHeight: $webViewHeight) // Pass height binding
+                                .frame(height: webViewHeight) // Use dynamic height
+                        }
                     }
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading) // Ensure body takes full width
@@ -167,8 +182,30 @@ struct EmailDetailView: View {
 //                }
 //            }
 //        }
+        // Add task to fetch body on appear
+        .task {
+            await fetchBody()
+        }
     }
     
+    // Function to fetch the email body
+    private func fetchBody() async {
+        guard fullBody == nil else { return } // Fetch only once
+
+        isLoadingBody = true
+        bodyErrorMessage = nil
+        
+        // Use the actual Gmail message ID
+        let fetchedBody = await viewModel.fetchFullEmailBody(for: email.gmailMessageId) 
+        
+        isLoadingBody = false
+        if let body = fetchedBody {
+            fullBody = body
+        } else {
+            bodyErrorMessage = viewModel.errorMessage ?? "Could not load email content."
+        }
+    }
+
     // Reusing the background helper from ContentView
     @ViewBuilder
     private func neumorphicBackgroundStyle() -> some View {
@@ -183,7 +220,9 @@ struct EmailDetailView: View {
 struct EmailDetailView_Previews: PreviewProvider {
     static var previews: some View {
         // Create a mock email with some history for preview
-        let originalEmail = MockEmail(sender: "Alice (Preview)",
+        let originalEmail = EmailDisplayData(
+                                      gmailMessageId: "originalPreviewId", // Correct order
+                                      sender: "Alice (Preview)",
                                       senderEmail: "alice.preview@example.com",
                                       recipient: "Preview Sender",
                                       subject: "Original Subject", 
@@ -193,7 +232,9 @@ struct EmailDetailView_Previews: PreviewProvider {
                                       isRead: true, 
                                       previousMessages: nil)
         
-        let previewEmail = MockEmail(sender: "Preview Sender", 
+        let previewEmail = EmailDisplayData(
+                                     gmailMessageId: "replyPreviewId", // Correct order
+                                     sender: "Preview Sender", 
                                      senderEmail: "sender.preview@example.com",
                                      recipient: "Alice (Preview)",
                                      subject: "Re: Original Subject", 
@@ -201,7 +242,7 @@ struct EmailDetailView_Previews: PreviewProvider {
                                      body: "This is the full body text for the main preview email.\n\nIt replies to the email below.",
                                      date: Date(), 
                                      isRead: false,
-                                     previousMessages: [originalEmail]) // Add history here
+                                     previousMessages: [originalEmail])
         
         NavigationView { // Wrap in NavigationView for preview
             EmailDetailView(email: previewEmail)

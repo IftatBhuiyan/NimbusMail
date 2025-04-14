@@ -3,8 +3,8 @@ import SwiftUI
 // Enum to define the purpose of the compose view
 enum ComposeMode: Identifiable {
     case new
-    case reply(original: MockEmail)
-    case forward(original: MockEmail)
+    case reply(original: EmailDisplayData)
+    case forward(original: EmailDisplayData)
     
     // Make identifiable for use with .sheet(item:)
     var id: String {
@@ -357,7 +357,8 @@ struct ComposeFieldView: View {
 // MARK: - Preview
 struct ComposeEmailView_Previews: PreviewProvider {
     static var previews: some View {
-        let mockViewModel = UserViewModel()
+        // Use the non-mock ViewModel initializer for previews
+        let mockViewModel = UserViewModel() 
         mockViewModel.userEmail = "preview.user@example.com"
         
         // Explicitly return the view

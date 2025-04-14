@@ -8,9 +8,10 @@
 import SwiftUI
 import SwiftData
 
-// MARK: - Mock Email Data Structure
-struct MockEmail: Identifiable, Hashable {
+// MARK: - Email Data Structure for Display
+struct EmailDisplayData: Identifiable, Hashable {
     let id = UUID()
+    let gmailMessageId: String // Actual ID from Gmail API
     let sender: String // Name for Inbox view
     let senderEmail: String? // Full email for Detail view
     let recipient: String?
@@ -19,7 +20,7 @@ struct MockEmail: Identifiable, Hashable {
     let body: String
     let date: Date
     var isRead: Bool = false
-    let previousMessages: [MockEmail]?
+    let previousMessages: [EmailDisplayData]?
     
     // Custom hash function if needed, especially if previousMessages is added
     func hash(into hasher: inout Hasher) {
@@ -27,7 +28,7 @@ struct MockEmail: Identifiable, Hashable {
     }
     
     // Custom equality check
-    static func == (lhs: MockEmail, rhs: MockEmail) -> Bool {
+    static func == (lhs: EmailDisplayData, rhs: EmailDisplayData) -> Bool {
         lhs.id == rhs.id
     }
 }
@@ -36,83 +37,29 @@ struct MockEmail: Identifiable, Hashable {
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var viewModel: UserViewModel
-    @State private var mockEmails: [MockEmail] = [
-        // --- Start of Conversation Thread ---
-        MockEmail(sender: "user@example.com", // Latest reply from user to Alice
-                  senderEmail: "user@example.com", // Add sender email
-                  recipient: "Alice", // Keep recipient as name/address as needed for display
-                  subject: "Re: Meeting Notes", 
-                  snippet: "Thanks for sending these over, Alice! Looks good.", 
-                  body: "Hi Alice,\n\nThanks for sending the meeting notes. Everything looks correct to me.\n\nBest,\nUser",
-                  date: Calendar.current.date(byAdding: .minute, value: -30, to: Date())!, // 30 mins ago
-                  isRead: true, 
-                  previousMessages: [ // Include the previous message(s) here
-                    MockEmail(sender: "Alice", // Original email from Alice
-                              senderEmail: "alice.m@example.com", // Add sender email
-                              recipient: "user@example.com",
-                              subject: "Meeting Notes", 
-                              snippet: "Here are the notes from today's meeting...", 
-                              body: "Hi Team,\n\nHere are the key takeaways from our meeting today:\n- Finalized the Q3 roadmap.\n- Discussed resource allocation for Project Phoenix.\n- Agreed on the new reporting structure.\n\nPlease review the attached document for full details.\n\nBest,\nAlice",
-                              date: Calendar.current.date(byAdding: .hour, value: -1, to: Date())!, // 1 hour ago
-                              isRead: true, 
-                              previousMessages: nil) // Original message has no previous messages
-                  ]
-        ),
-        // --- End of Conversation Thread ---
-        
-        MockEmail(sender: "Bob Johnson", 
-                  senderEmail: "bob.j@work.com", // Add sender email
-                  recipient: "user@example.com",
-                  subject: "Project Update", 
-                  snippet: "Quick update on the Alpha project progress.", 
-                  body: "Hello,\n\nJust a quick update on the Alpha project. We've completed the initial design phase and are moving into development next week. The timeline is still on track. Let me know if you have any questions.\n\nThanks,\nBob",
-                  date: Calendar.current.date(byAdding: .hour, value: -3, to: Date())!, isRead: true, previousMessages: nil),
-        MockEmail(sender: "Newsletter",
-                  senderEmail: "deals@company-news.com", // Add sender email
-                  recipient: "user@example.com",
-                  subject: "Weekly Deals", 
-                  snippet: "Don't miss out on our exclusive weekly offers!", 
-                  body: "This week's specials include:\n- 20% off all electronics\n- Free shipping on orders over $50\n- Exclusive access to new arrivals\n\nClick here to shop now! Offers expire Sunday.",
-                  date: Calendar.current.date(byAdding: .day, value: -1, to: Date())!, isRead: false, previousMessages: nil), 
-        MockEmail(sender: "Charlie", 
-                  senderEmail: "charlie.d@personal.net", // Add sender email
-                  recipient: "user@example.com",
-                  subject: "Question about report", 
-                  snippet: "Had a quick question regarding the Q1 report figures.", 
-                  body: "Hi,\n\nI was looking over the Q1 report and had a question about the sales figures on page 5. Could we schedule a quick chat to discuss?\n\nBest,\nCharlie",
-                  date: Calendar.current.date(byAdding: .day, value: -1, to: Date())!, isRead: true, previousMessages: nil),
-        MockEmail(sender: "Support Team", 
-                  senderEmail: "support@onetracker.app", // Add sender email
-                  recipient: "user@example.com",
-                  subject: "Your Ticket #12345", 
-                  snippet: "We have received your support request and will...", 
-                  body: "Dear User,\n\nThank you for contacting support. We have received your request (Ticket #12345) regarding login issues. A support representative will review your ticket and respond within 24 hours.\n\nSincerely,\nThe Support Team",
-                  date: Calendar.current.date(byAdding: .day, value: -3, to: Date())!, isRead: true, previousMessages: nil),
-        MockEmail(sender: "Marketing Dept.", 
-                  senderEmail: "marketing@onetracker.app", // Add sender email
-                  recipient: "user@example.com",
-                  subject: "New Product Launch!", 
-                  snippet: "Introducing the latest innovation from OneTracker!", 
-                  body: "Get ready! OneTracker is thrilled announce the launch of our revolutionary new email feature, designed to streamline your inbox like never before. Experience seamless integration and unparalleled efficiency. Learn more on our website!",
-                  date: Calendar.current.date(byAdding: .day, value: -5, to: Date())!, isRead: false, previousMessages: nil)
-    ]
     @State private var showingProfileSheet = false
     @State private var isSearchActive = false
     @State private var searchText = ""
+    @State private var isSideMenuShowing = false // State for side menu
+    @State private var showingAddAccountSheet = false // State for Add Account sheet
 
-    var filteredEmails: [MockEmail] {
+    // Remove local mock emails - use viewModel.inboxEmails instead
+    // @State private var mockEmails: [MockEmail] = [...] 
+
+    // Computed property now just filters viewModel's emails
+    var filteredEmails: [EmailDisplayData] {
         if searchText.isEmpty {
-            return mockEmails
+            return viewModel.inboxEmails // Use viewModel data source
         } else {
-            // Use the recursive search function in the filter
-            return mockEmails.filter { email in
+            // Use the recursive search function on viewModel's emails
+            return viewModel.inboxEmails.filter { email in
                 emailContainsText(email, searchText)
             }
         }
     }
     
     // Recursive function to search within email threads
-    private func emailContainsText(_ email: MockEmail, _ text: String) -> Bool {
+    private func emailContainsText(_ email: EmailDisplayData, _ text: String) -> Bool {
         let lowercasedText = text.localizedLowercase
         
         // Check current email fields
@@ -140,128 +87,183 @@ struct ContentView: View {
         }
         
         // Text not found in this email or its history
-        return false
+                     return false
     }
 
     var body: some View {
-            NavigationView {
-            ZStack(alignment: .bottomTrailing) {
+        NavigationView {
+            ZStack(alignment: .leading) { // Outer ZStack for side menu
+                // Main Content ZStack (renamed innerZStack for clarity if needed)
+                ZStack(alignment: .bottomTrailing) {
                     neumorphicBackgroundColor.edgesIgnoringSafeArea(.all)
 
                     VStack(spacing: 0) {
-                    HStack {
-                        if isSearchActive {
+                        // Header HStack
                         HStack {
-                                Image(systemName: "magnifyingglass")
-                                    .foregroundColor(.secondary)
-                                TextField("Search Mail", text: $searchText)
-                                    .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-                                    .accentColor(Color.blue)
-                                    .autocapitalization(.none)
-                                    .disableAutocorrection(true)
-                                    
-                                if !searchText.isEmpty {
-                            Button {
-                                        searchText = ""
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundColor(.secondary)
+                            if isSearchActive {
+                                HStack {
+                                    Image(systemName: "magnifyingglass")
+                                        .foregroundColor(.secondary)
+                                    TextField("Search Mail", text: $searchText)
+                                        .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                                        .accentColor(Color.blue)
+                                        .autocapitalization(.none)
+                                        .disableAutocorrection(true)
+                                        
+                                    if !searchText.isEmpty {
+                                        Button {
+                                            searchText = ""
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .foregroundColor(.secondary)
+                                        }
                                     }
                                 }
-                            }
-                            .modifier(NeumorphicInnerShadow())
-                            
-                            Button("Cancel") {
-                                withAnimation {
-                                    isSearchActive = false
-                                    searchText = ""
+                                .modifier(NeumorphicInnerShadow())
+                                
+                                Button("Cancel") {
+                                    withAnimation {
+                                        isSearchActive = false
+                                        searchText = ""
+                                    }
                                 }
-                            }
-                            .foregroundColor(.blue)
-                            .padding(.leading, 8)
-                            
-                        } else {
-                            Button {
-                                showingProfileSheet = true
-                            } label: {
-                                Image(systemName: "person.crop.circle")
-                                    .font(.title2)
-                                    .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-                            }
-                            .frame(width: 44, height: 44)
-                            
-                            Spacer()
-                            
-                            Text("Inbox")
-                                .font(.largeTitle)
-                                .fontWeight(.bold)
-                                .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-                            
-                            Spacer()
-                            
+                                .foregroundColor(.blue)
+                                .padding(.leading, 8)
+                                
+                            } else {
+                                // Hamburger Menu Button
                                 Button {
-                                withAnimation {
-                                    isSearchActive = true
+                                    withAnimation(.easeInOut) {
+                                        isSideMenuShowing.toggle()
+                                    }
+                                } label: {
+                                    Image(systemName: "line.3.horizontal") // Hamburger icon
+                                        .font(.title2)
+                                        .foregroundColor(Color(hex: "0D2750").opacity(0.8))
                                 }
-                            } label: {
-                                Image(systemName: "magnifyingglass")
-                                    .font(.title2)
+                                .frame(width: 44, height: 44)
+                                
+                                Spacer()
+                                
+                                Text("Inbox")
+                                    .font(.largeTitle)
+                                    .fontWeight(.bold)
                                     .foregroundColor(Color(hex: "0D2750").opacity(0.8))
-                            }
-                             .frame(width: 44, height: 44)
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.top)
-                    .padding(.bottom, 8)
-                    .frame(height: 50)
 
-                    ScrollView {
-                        LazyVStack(spacing: 15) {
-                            ForEach(filteredEmails) { email in
-                                NavigationLink(destination: EmailDetailView(email: email)) {
-                                    EmailRowView(email: email)
-                                        .background(neumorphicBackgroundStyle())
+                                Spacer()
+
+                                // Search Button (Re-add)
+                                Button {
+                                    withAnimation {
+                                        isSearchActive = true
+                                    }
+                                } label: {
+                                    Image(systemName: "magnifyingglass")
+                                        .font(.title2)
+                                        .foregroundColor(Color(hex: "0D2750").opacity(0.8))
                                 }
-                                .buttonStyle(.plain)
-                                .simultaneousGesture(TapGesture().onEnded {
-                                     if let index = mockEmails.firstIndex(where: { $0.id == email.id }) {
-                                         mockEmails[index].isRead = true
-                                     }
-                                })
+                                 .frame(width: 44, height: 44)
                             }
                         }
                         .padding(.horizontal)
-                        .padding(.top, 28)
-                        .padding(.bottom, 80)
+                        .padding(.top)
+                        .padding(.bottom, 8)
+                        .frame(height: 50)
+
+                        ScrollView {
+                            // Show progress indicator when fetching
+                            if viewModel.isFetchingEmails {
+                                ProgressView()
+                                    .padding()
+                            } else if filteredEmails.isEmpty {
+                                // Show empty state message
+                                Text("Inbox is empty")
+                                    .foregroundColor(.secondary)
+                                    .padding()
+                            } else {
+                                LazyVStack(spacing: 15) {
+                                    // Iterate over filteredEmails (which comes from viewModel)
+                                    ForEach(filteredEmails) { email in 
+                                        NavigationLink(destination: EmailDetailView(email: email)) {
+                                            EmailRowView(email: email)
+                                                .background(neumorphicBackgroundStyle())
+                                        }
+                                        .buttonStyle(.plain)
+                                        // Remove the tap gesture that marks local mock data as read
+                                        // .simultaneousGesture(TapGesture().onEnded { ... })
+                                    }
+                                }
+                                .padding(.horizontal)
+                                .padding(.top, 28)
+                                .padding(.bottom, 80)
+                            }
+                        }
+                        // Add refreshable modifier here
+                        .refreshable { 
+                            print("Pull to refresh triggered. Fetching emails...")
+                            viewModel.fetchAllInboxMessages()
+                        }
+                    }
+
+                    // Floating Action Button
+                    FloatingActionButton {
+                        print("Compose Email Tapped")
+                    }
+                    .padding()
+                }
+                .navigationBarHidden(true)
+                // Disable main content interaction when menu is showing
+                .disabled(isSideMenuShowing)
+                // Darken main content when menu is showing
+                .overlay {
+                    if isSideMenuShowing {
+                        Color.black.opacity(0.4)
+                            .edgesIgnoringSafeArea(.all)
+                            .onTapGesture {
+                                withAnimation(.easeInOut) {
+                                    isSideMenuShowing = false
+                                }
+                            }
                     }
                 }
 
-                FloatingActionButton {
-                    print("Compose Email Tapped")
+                // Side Menu (conditionally displayed)
+                if isSideMenuShowing {
+                    // Pass the necessary bindings
+                    SideMenuView(isShowing: $isSideMenuShowing, 
+                                 showingAddAccountSheet: $showingAddAccountSheet)
+                        .frame(width: UIScreen.main.bounds.width * 0.75) 
+                        .background(neumorphicBackgroundColor.edgesIgnoringSafeArea(.all))
+                        .transition(.move(edge: .leading))
+                        .zIndex(1) 
                 }
-                .padding()
-            }
-            .navigationBarHidden(true)
-            .sheet(isPresented: $showingProfileSheet) {
-                ProfileView(viewModel: viewModel)
-                    .environmentObject(viewModel)
-                    .background(neumorphicBackgroundColor.edgesIgnoringSafeArea(.all))
             }
         }
+        .onAppear { // Fetch emails when the view appears
+            if viewModel.inboxEmails.isEmpty && !viewModel.addedAccounts.isEmpty {
+                viewModel.fetchAllInboxMessages()
+            }
+        }
+        // Add the sheet modifier for the Add Account view
+        .sheet(isPresented: $showingAddAccountSheet) {
+            // Placeholder for AddAccountProviderView
+            AddAccountProviderView()
+                .environmentObject(viewModel)
+        }
+        .environmentObject(viewModel)
     }
     
     private func neumorphicBackgroundStyle() -> some View {
         RoundedRectangle(cornerRadius: 15)
-             .fill(neumorphicBackgroundColor)
-             .shadow(color: darkDropShadowColor, radius: darkDropShadowBlur / 2, x: darkDropShadowX / 2, y: darkDropShadowY / 2)
-             .shadow(color: lightDropShadowColor, radius: lightDropShadowBlur / 2, x: lightDropShadowX / 2, y: lightDropShadowY / 2)
+            .fill(neumorphicBackgroundColor)
+            .shadow(color: darkDropShadowColor, radius: darkDropShadowBlur / 2, x: darkDropShadowX / 2, y: darkDropShadowY / 2)
+            .shadow(color: lightDropShadowColor, radius: lightDropShadowBlur / 2, x: lightDropShadowX / 2, y: lightDropShadowY / 2)
     }
 }
 
 // MARK: - Email Row View
 struct EmailRowView: View {
-    let email: MockEmail
+    let email: EmailDisplayData
 
     var body: some View {
         HStack(alignment: .top, spacing: 15) {
@@ -278,7 +280,7 @@ struct EmailRowView: View {
                         .foregroundColor(Color(hex: "0D2750").opacity(0.9))
                     Spacer()
                     Text(formatDate(email.date))
-                            .font(.caption)
+                        .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 Text(email.subject)
@@ -339,16 +341,19 @@ struct FloatingActionButton: View {
 // Preview Provider - Needs updating if you want previews for the new structure
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
-        // Remove SwiftData container setup as it's no longer needed for previews here
-        // let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        // let container = try! ModelContainer(for: Transaction.self, configurations: config)
-
-        let userViewModel = UserViewModel()
-        userViewModel.isAuthenticated = true
+        // Add preview emails to the preview view model
+        let previewEmails = [
+            EmailDisplayData(gmailMessageId: "preview1", sender: "Alice Preview", senderEmail: "a@p.com", recipient: "Me", subject: "Preview Email 1", snippet: "Snip 1", body: "Body 1", date: Date(), isRead: false, previousMessages: nil),
+            EmailDisplayData(gmailMessageId: "preview2", sender: "Bob Preview", senderEmail: "b@p.com", recipient: "Me", subject: "Preview Email 2", snippet: "Snip 2", body: "Body 2", date: Date(), isRead: true, previousMessages: nil)
+        ]
+        // Rename mockViewModel if desired, but keep for now for clarity of purpose
+        let mockViewModel = UserViewModel(isAuthenticated: true, 
+                                        userEmail: "preview@example.com", 
+                                        userName: "Preview User", 
+                                        inboxEmails: previewEmails)
 
         return ContentView()
-            // .modelContainer(container) // Remove container injection
-            .environmentObject(userViewModel)
+            .environmentObject(mockViewModel)
     }
 }
 

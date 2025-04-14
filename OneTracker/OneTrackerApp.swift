@@ -8,13 +8,26 @@
 import SwiftUI
 import SwiftData // Re-add SwiftData import
 import FirebaseCore
+import GoogleSignIn // Import GoogleSignIn
 
-// Configure Firebase
+// Configure Firebase & Google Sign-In
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
         FirebaseApp.configure()
+        
+        // Remove manual GIDSignIn configuration - SDK reads from Info.plist
+        // guard let clientID = FirebaseApp.app()?.options.clientID else { return true }
+        // GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
+        
         return true
+    }
+    
+    // Handle the URL callback from Google Sign-In
+    func application(_ app: UIApplication, 
+                     open url: URL, 
+                     options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
+        return GIDSignIn.sharedInstance.handle(url)
     }
 }
 

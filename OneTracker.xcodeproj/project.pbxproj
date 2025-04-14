@@ -15,6 +15,10 @@
 		3BCFF2AE2DA9A3A500B8DA78 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 3BCFF2AD2DA9A3A500B8DA78 /* FirebaseFirestore */; };
 		3BCFF2B02DA9A3A500B8DA78 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 3BCFF2AF2DA9A3A500B8DA78 /* FirebaseFunctions */; };
 		3BCFF2B22DA9A3A500B8DA78 /* FirebaseMLModelDownloader in Frameworks */ = {isa = PBXBuildFile; productRef = 3BCFF2B12DA9A3A500B8DA78 /* FirebaseMLModelDownloader */; };
+		3BCFF3882DAC97A800B8DA78 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 3BCFF3872DAC97A800B8DA78 /* GoogleSignIn */; };
+		3BCFF38A2DAC97A800B8DA78 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 3BCFF3892DAC97A800B8DA78 /* GoogleSignInSwift */; };
+		3BCFF3962DAC9EE500B8DA78 /* GoogleAPIClientForREST_Gmail in Frameworks */ = {isa = PBXBuildFile; productRef = 3BCFF3952DAC9EE500B8DA78 /* GoogleAPIClientForREST_Gmail */; };
+		3BCFF3992DAC9FEB00B8DA78 /* GoogleAPIClientForRESTCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3BCFF3982DAC9FEB00B8DA78 /* GoogleAPIClientForRESTCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -81,9 +85,13 @@
 				3BCFF2AA2DA9A3A500B8DA78 /* FirebaseCore in Frameworks */,
 				3BCFF2B02DA9A3A500B8DA78 /* FirebaseFunctions in Frameworks */,
 				3BCFF2A62DA9A3A500B8DA78 /* FirebaseAuth in Frameworks */,
+				3BCFF38A2DAC97A800B8DA78 /* GoogleSignInSwift in Frameworks */,
+				3BCFF3962DAC9EE500B8DA78 /* GoogleAPIClientForREST_Gmail in Frameworks */,
 				3BCFF2A12DA99CE600B8DA78 /* LinkKit in Frameworks */,
 				3BCFF2B22DA9A3A500B8DA78 /* FirebaseMLModelDownloader in Frameworks */,
 				3BCFF2AE2DA9A3A500B8DA78 /* FirebaseFirestore in Frameworks */,
+				3BCFF3992DAC9FEB00B8DA78 /* GoogleAPIClientForRESTCore in Frameworks */,
+				3BCFF3882DAC97A800B8DA78 /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -110,6 +118,7 @@
 				3B2C5D3B2DA62829009C50AA /* OneTracker */,
 				3B2C5D502DA6282B009C50AA /* OneTrackerTests */,
 				3B2C5D5A2DA6282B009C50AA /* OneTrackerUITests */,
+				3BCFF3972DAC9F6D00B8DA78 /* Frameworks */,
 				3B2C5D3A2DA62829009C50AA /* Products */,
 			);
 			sourceTree = "<group>";
@@ -122,6 +131,13 @@
 				3B2C5D572DA6282B009C50AA /* OneTrackerUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		3BCFF3972DAC9F6D00B8DA78 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -152,6 +168,10 @@
 				3BCFF2AD2DA9A3A500B8DA78 /* FirebaseFirestore */,
 				3BCFF2AF2DA9A3A500B8DA78 /* FirebaseFunctions */,
 				3BCFF2B12DA9A3A500B8DA78 /* FirebaseMLModelDownloader */,
+				3BCFF3872DAC97A800B8DA78 /* GoogleSignIn */,
+				3BCFF3892DAC97A800B8DA78 /* GoogleSignInSwift */,
+				3BCFF3952DAC9EE500B8DA78 /* GoogleAPIClientForREST_Gmail */,
+				3BCFF3982DAC9FEB00B8DA78 /* GoogleAPIClientForRESTCore */,
 			);
 			productName = OneTracker;
 			productReference = 3B2C5D392DA62829009C50AA /* OneTracker.app */;
@@ -238,6 +258,8 @@
 			packageReferences = (
 				3BCFF29F2DA99CE600B8DA78 /* XCRemoteSwiftPackageReference "plaid-link-ios-spm" */,
 				3BCFF2A22DA9A3A500B8DA78 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				3BCFF3862DAC97A800B8DA78 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				3BCFF3942DAC9EE500B8DA78 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 3B2C5D3A2DA62829009C50AA /* Products */;
@@ -327,7 +349,6 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = OneTracker/Info.plist;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -337,7 +358,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.EclipseStudio.OneTracker;
+				PRODUCT_BUNDLE_IDENTIFIER = com.EclipseStudio.LunarMail;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -363,7 +384,6 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = OneTracker/Info.plist;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -373,7 +393,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.EclipseStudio.OneTracker;
+				PRODUCT_BUNDLE_IDENTIFIER = com.EclipseStudio.LunarMail;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -634,6 +654,22 @@
 				minimumVersion = 11.11.0;
 			};
 		};
+		3BCFF3862DAC97A800B8DA78 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.0.0;
+			};
+		};
+		3BCFF3942DAC9EE500B8DA78 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/google-api-objectivec-client-for-rest.git";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -676,6 +712,26 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 3BCFF2A22DA9A3A500B8DA78 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseMLModelDownloader;
+		};
+		3BCFF3872DAC97A800B8DA78 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3BCFF3862DAC97A800B8DA78 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		3BCFF3892DAC97A800B8DA78 /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3BCFF3862DAC97A800B8DA78 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignInSwift;
+		};
+		3BCFF3952DAC9EE500B8DA78 /* GoogleAPIClientForREST_Gmail */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3BCFF3942DAC9EE500B8DA78 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */;
+			productName = GoogleAPIClientForREST_Gmail;
+		};
+		3BCFF3982DAC9FEB00B8DA78 /* GoogleAPIClientForRESTCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3BCFF3942DAC9EE500B8DA78 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */;
+			productName = GoogleAPIClientForRESTCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
