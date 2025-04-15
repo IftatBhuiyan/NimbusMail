@@ -24,6 +24,8 @@ struct EmailDisplayData: Identifiable, Hashable {
     let date: Date
     var isRead: Bool = false
     var previousMessages: [EmailDisplayData]?
+    let accountEmail: String // Add this line to store the account email
+    var labelIds: [String]? // Add this line to store label IDs
     
     // Custom hash function if needed, especially if previousMessages is added
     func hash(into hasher: inout Hasher) {
@@ -47,6 +49,8 @@ struct ContentView: View {
     @State private var showingAddAccountSheet = false // State for Add Account sheet
     @FocusState private var isSearchFieldFocused: Bool // Add FocusState for search field
     @State private var composeMode: ComposeMode? = nil // State to trigger compose sheet
+    @State private var displayedEmails: [EmailDisplayData] = [] // State for debounced results
+    @State private var searchTask: Task<Void, Never>? = nil // Task for debouncing
 
     // Remove local mock emails - use viewModel.inboxEmails instead
     // @State private var mockEmails: [MockEmail] = [...] 
@@ -185,21 +189,24 @@ struct ContentView: View {
 
                         ScrollView {
                             // Show progress indicator when fetching
-                            if viewModel.isFetchingEmails {
+                            if viewModel.isFetchingEmails && displayedEmails.isEmpty { // Show initial fetch progress
                                 ProgressView()
                                     .padding()
-                            } else if filteredEmails.isEmpty {
-                                // Show empty state message
-                                Text("Inbox is empty")
+                            } else if displayedEmails.isEmpty && !viewModel.isFetchingEmails { // Check displayedEmails
+                                // Show empty state message (adjust if needed based on search)
+                                Text(searchText.isEmpty ? "Inbox is empty" : "No results found")
                                     .foregroundColor(.secondary)
                                     .padding()
                             } else {
                                 LazyVStack(spacing: 15) {
-                                    // Iterate over filteredEmails (which comes from viewModel)
-                                    ForEach(filteredEmails) { email in 
+                                    // Iterate over displayedEmails (state variable)
+                                    ForEach(displayedEmails) { email in 
                                         NavigationLink(destination: EmailDetailView(email: email)) {
                                             EmailRowView(email: email)
                                                 .background(neumorphicBackgroundStyle())
+                                                .onAppear { // Trigger pagination check
+                                                    viewModel.fetchMoreEmailsIfNeeded(currentItem: email)
+                                                }
                                         }
                                         .buttonStyle(.plain)
                                         // Remove the tap gesture that marks local mock data as read
@@ -214,7 +221,9 @@ struct ContentView: View {
                         // Add refreshable modifier here
                         .refreshable { 
                             print("Pull to refresh triggered. Fetching emails...")
-                            viewModel.fetchAllInboxMessages()
+                            cancelSearchTask() // Cancel any pending search
+                            viewModel.fetchAllInboxMessages() // Trigger full refresh
+                            // Update displayed emails after fetch completes (handled by onAppear/onChange)
                         }
                     }
 
@@ -246,7 +255,7 @@ struct ContentView: View {
                     // Pass the necessary bindings
                     SideMenuView(isShowing: $isSideMenuShowing, 
                                  showingAddAccountSheet: $showingAddAccountSheet)
-                        .frame(width: UIScreen.main.bounds.width * 0.75) 
+                        .frame(width: UIScreen.main.bounds.width * 0.9) // Use 90% width 
                         .background(neumorphicBackgroundColor.edgesIgnoringSafeArea(.all))
                         .transition(.move(edge: .leading))
                         .zIndex(1) 
@@ -254,9 +263,53 @@ struct ContentView: View {
             }
         }
         .onAppear { // Fetch emails when the view appears
-            if viewModel.inboxEmails.isEmpty && !viewModel.addedAccounts.isEmpty {
-                viewModel.fetchAllInboxMessages()
+            // Initial load or if coming back to the view
+            updateDisplayedEmails(searchText: searchText)
+        }
+        // --- Add onChange for debouncing --- 
+        .onChange(of: searchText) { newValue in
+            // Cancel the previous task if it exists
+            cancelSearchTask()
+            
+            // Start a new task to filter after a delay
+            searchTask = Task {
+                var finalResults: [EmailDisplayData] = []
+                do {
+                    // Wait for 300 milliseconds
+                    try await Task.sleep(nanoseconds: 300_000_000)
+                    
+                    // --- Perform filtering in the background --- 
+                    if newValue.isEmpty {
+                        finalResults = viewModel.inboxEmails
+                    } else {
+                        finalResults = viewModel.inboxEmails.filter { email in
+                            emailContainsText(email, newValue)
+                        }
+                    }
+                    // --- End filtering ---
+                    
+                    // Update the state on the main actor ONLY with the final result
+                    await MainActor.run { 
+                        // Check if task was cancelled before updating state
+                        guard !Task.isCancelled else { return }
+                        displayedEmails = finalResults
+                    }
+                } catch {
+                    // Handle cancellation (Task.sleep throws CancellationError)
+                    // Check if the error is specifically CancellationError
+                    if !(error is CancellationError) {
+                        print("An unexpected error occurred in search task: \(error)")
+                    } else {
+                        print("Search task cancelled.") // Keep this log for cancellations
+                    }
+                }
             }
+        }
+        // --- Update displayed emails when source changes --- 
+        .onChange(of: viewModel.inboxEmails) { _ in
+            // Update displayed emails if the source data changes (e.g., after fetch/pagination)
+            // Keep current search text filtering applied
+            updateDisplayedEmails(searchText: searchText)
         }
         // Add the sheet modifier for the Add Account view
         .sheet(isPresented: $showingAddAccountSheet) {
@@ -272,6 +325,23 @@ struct ContentView: View {
         }
         .environmentObject(viewModel)
     }
+    
+    // --- Helper Functions --- 
+    private func updateDisplayedEmails(searchText: String) {
+        if searchText.isEmpty {
+            displayedEmails = viewModel.inboxEmails
+        } else {
+            displayedEmails = viewModel.inboxEmails.filter { email in
+                emailContainsText(email, searchText)
+            }
+        }
+    }
+    
+    private func cancelSearchTask() {
+        searchTask?.cancel()
+        searchTask = nil
+    }
+    // --- End Helper Functions ---
     
     private func neumorphicBackgroundStyle() -> some View {
         RoundedRectangle(cornerRadius: 15)
@@ -357,28 +427,6 @@ struct FloatingActionButton: View {
 // Removed TransactionRow View (no longer needed here)
 // Removed PeriodSelectorView struct (no longer needed)
 // Removed CustomDateRangePicker struct (no longer needed)
-
-// Preview Provider - Needs updating if you want previews for the new structure
-struct ContentView_Previews: PreviewProvider {
-    static var previews: some View {
-        // Add preview emails to the preview view model
-        let previewEmails = [
-            EmailDisplayData(gmailMessageId: "preview1", threadId: nil, messageIdHeader: nil, referencesHeader: nil, sender: "Alice Preview", senderEmail: "a@p.com", recipient: "Me", subject: "Preview Email 1", snippet: "Snip 1", body: "Body 1", date: Date(), isRead: false, previousMessages: nil),
-            EmailDisplayData(gmailMessageId: "preview2", threadId: nil, messageIdHeader: nil, referencesHeader: nil, sender: "Bob Preview", senderEmail: "b@p.com", recipient: "Me", subject: "Preview Email 2", snippet: "Snip 2", body: "Body 2", date: Date(), isRead: true, previousMessages: nil)
-        ]
-        // Rename mockViewModel if desired, but keep for now for clarity of purpose
-        let mockViewModel = UserViewModel(isAuthenticated: true, 
-                                        userEmail: "preview@example.com", 
-                                        userName: "Preview User", 
-                                        inboxEmails: previewEmails)
-
-        return ContentView()
-            .environmentObject(mockViewModel)
-    }
-}
-
-// Keep Neumorphism helpers if they are not in a separate utility file yet
-// ... (Color(hex:), neumorphicBackgroundColor, NeumorphicShadow, etc.) ...
 
 // Removed SuggestionData struct (finance specific)
 

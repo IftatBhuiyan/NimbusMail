@@ -135,76 +135,64 @@ class GmailAPIService {
     // MARK: - Fetching Threads (Replaces fetchInboxMessages)
 
     // Fetches inbox thread IDs and details, handling pagination.
-    func fetchInboxThreads(for account: EmailAccount, maxTotalThreads: Int = 50, completion: @escaping (Result<[GTLRGmail_Thread], Error>) -> Void) {
-        print("Attempting to fetch up to \(maxTotalThreads) inbox threads for \(account.emailAddress)")
+    // Updated to accept optional labelIds and searchQuery
+    // Updated completion handler to return nextPageToken
+    func fetchInboxThreads(for account: EmailAccount, labelIds: [String]? = nil, searchQuery: String? = nil, pageToken: String? = nil, maxTotalThreads: Int = 50, completion: @escaping (Result<([GTLRGmail_Thread], String?), Error>) -> Void) {
+        print("Attempting to fetch threads for \(account.emailAddress). Labels: \(labelIds?.joined(separator: ", ") ?? "N/A"), Query: \(searchQuery ?? "N/A"), PageToken: \(pageToken ?? "nil"), Limit: \(maxTotalThreads)")
         
-        var allThreads: [GTLRGmail_Thread] = []
-        var currentPageToken: String? = nil
-        let maxResultsPerPage: UInt = 100 // Adjust as needed, API max is higher but impacts performance
-
-        // Recursive helper function to fetch thread list pages
-        func fetchListPage(authorizer: GTMSessionFetcherAuthorizer) {
-            let listQuery = GTLRGmailQuery_UsersThreadsList.query(withUserId: "me")
-            listQuery.labelIds = ["INBOX"] // Fetch threads with at least one message in INBOX
-            listQuery.maxResults = maxResultsPerPage
-            listQuery.pageToken = currentPageToken
-            
-            self.service.authorizer = authorizer
-            print("Fetching thread list page with token: \(currentPageToken ?? "nil")")
-
-            self.service.executeQuery(listQuery) { [weak self] (ticket, response, error) in
-                guard let self = self else { return }
-                
-                if let error = error {
-                    print("Error fetching thread list page: \(error.localizedDescription)")
-                    completion(.failure(error))
-                    return
-                }
-
-                guard let listResponse = response as? GTLRGmail_ListThreadsResponse else {
-                    print("Error: Could not parse thread list response.")
-                    completion(.failure(NSError(domain: "GmailAPIService", code: -10, userInfo: [NSLocalizedDescriptionKey: "Invalid thread list response"])))
-                    return
-                }
-
-                // Get thread IDs from the current page
-                let threadInfos = listResponse.threads ?? []
-                print("Fetched \(threadInfos.count) thread infos on this page.")
-                
-                // --- Fetch Full Thread Details Concurrently --- 
-                self.fetchFullThreads(for: account, threadInfos: threadInfos, authorizer: authorizer) { result in
-                    switch result {
-                    case .success(let fetchedThreads):
-                        allThreads.append(contentsOf: fetchedThreads)
-                        print("Fetched details for \(fetchedThreads.count) threads. Total collected: \(allThreads.count)")
-                        
-                        // Check for next page token AND if we've reached the desired limit
-                        if let nextToken = listResponse.nextPageToken, !nextToken.isEmpty, allThreads.count < maxTotalThreads {
-                            currentPageToken = nextToken
-                            // Fetch the next list page recursively
-                            fetchListPage(authorizer: authorizer) 
-                        } else {
-                            // No more pages or reached limit - complete successfully
-                            print("Finished fetching thread pages (or reached limit of \(maxTotalThreads)). Total threads collected: \(allThreads.count)")
-                            completion(.success(Array(allThreads.prefix(maxTotalThreads))))
-                        }
-                        
-                    case .failure(let detailError):
-                        // If fetching details fails for a batch, report the error and stop.
-                        print("Error fetching full thread details: \(detailError.localizedDescription)")
-                        completion(.failure(detailError))
-                    }
-                }
-                // --- End Concurrent Fetch ---
-            }
-        }
-
-        // Start the process by getting the authorizer
+        // -- Simplified Fetch Logic (Fetch ONE Page) ---
         getAuthorizer(for: account.emailAddress) { [weak self] result in
-            guard self != nil else { return }
+            guard let self = self else { return }
             switch result {
             case .success(let authorizer):
-                fetchListPage(authorizer: authorizer)
+                self.service.authorizer = authorizer
+                let listQuery = GTLRGmailQuery_UsersThreadsList.query(withUserId: "me")
+                
+                // Use labelIds or searchQuery conditionally
+                if let labelIds = labelIds, !labelIds.isEmpty {
+                    listQuery.labelIds = labelIds
+                }
+                if let searchQuery = searchQuery, !searchQuery.isEmpty {
+                    listQuery.q = searchQuery
+                }
+                // Use the provided pageToken
+                listQuery.pageToken = pageToken 
+                // Limit results per page (adjust as needed, 50 is reasonable)
+                listQuery.maxResults = UInt(min(maxTotalThreads, 50)) 
+
+                self.service.executeQuery(listQuery) { [weak self] (ticket, response, error) in
+                    guard let self = self else { return }
+
+                    if let error = error {
+                        print("Error fetching thread list page: \(error.localizedDescription)")
+                        completion(.failure(error))
+                        return
+                    }
+
+                    guard let listResponse = response as? GTLRGmail_ListThreadsResponse else {
+                        print("Error: Could not parse thread list response.")
+                        completion(.failure(NSError(domain: "GmailAPIService", code: -10, userInfo: [NSLocalizedDescriptionKey: "Invalid thread list response"])))
+                        return
+                    }
+
+                    let threadInfos = listResponse.threads ?? []
+                    let nextPageToken = listResponse.nextPageToken // Capture the next page token
+                    print("Fetched \(threadInfos.count) thread infos. Next page token: \(nextPageToken ?? "nil")")
+                    
+                    // Fetch full details for this page's threads
+                    self.fetchFullThreads(for: account, threadInfos: threadInfos, authorizer: authorizer) { result in
+                        switch result {
+                        case .success(let fetchedThreads):
+                            print("Fetched details for \(fetchedThreads.count) threads.")
+                            // Complete with threads for THIS page and the next token
+                            completion(.success((fetchedThreads, nextPageToken))) 
+                        case .failure(let detailError):
+                            print("Error fetching full thread details: \(detailError.localizedDescription)")
+                            completion(.failure(detailError))
+                        }
+                    }
+                }
+                
             case .failure(let error):
                 print("Failed to get authorizer for fetching threads: \(error.localizedDescription)")
                 completion(.failure(error))
@@ -564,6 +552,48 @@ class GmailAPIService {
                 
             case .failure(let error):
                 print("Failed to get authorizer for sending email: \(error.localizedDescription)")
+                completion(.failure(error))
+            }
+        }
+    }
+
+    // MARK: - Fetching Labels
+
+    func fetchLabels(for account: EmailAccount, completion: @escaping (Result<[GTLRGmail_Label], Error>) -> Void) {
+        print("Attempting to fetch labels for \(account.emailAddress)")
+        
+        // 1. Get Authorizer
+        getAuthorizer(for: account.emailAddress) { [weak self] result in
+            guard let self = self else { return }
+            
+            switch result {
+            case .success(let authorizer):
+                self.service.authorizer = authorizer
+                
+                // 2. Prepare the API Query
+                let query = GTLRGmailQuery_UsersLabelsList.query(withUserId: "me")
+                
+                // 3. Execute the Query
+                self.service.executeQuery(query) { (ticket, response, error) in
+                    if let error = error {
+                        print("Error fetching labels: \(error.localizedDescription)")
+                        completion(.failure(error))
+                        return
+                    }
+                    
+                    guard let listResponse = response as? GTLRGmail_ListLabelsResponse,
+                          let labels = listResponse.labels else {
+                        print("Error: Could not parse label response or no labels found.")
+                        completion(.failure(NSError(domain: "GmailAPIService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid label response"])))
+                        return
+                    }
+                    
+                    print("Successfully fetched \(labels.count) labels for \(account.emailAddress).")
+                    completion(.success(labels))
+                }
+                
+            case .failure(let error):
+                print("Failed to get authorizer for fetching labels: \(error.localizedDescription)")
                 completion(.failure(error))
             }
         }

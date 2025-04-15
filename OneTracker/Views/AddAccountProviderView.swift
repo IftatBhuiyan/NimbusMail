@@ -16,7 +16,8 @@ struct AddAccountProviderView: View {
     }
     
     private let providers: [Provider] = [
-        Provider(name: "Gmail", iconName: "google-logo", iconColor: .white) { print("Gmail Tapped") /* TODO: Start Google Sign In */ },
+        // Keep only the custom asset Gmail provider
+        Provider(name: "Gmail", iconName: "google-logo", iconColor: .white) { print("Gmail Tapped") /* Action handled by the GoogleSignInButton */ }, 
         Provider(name: "Outlook", iconName: "outlook-logo", iconColor: nil) { print("Outlook Tapped") },
         Provider(name: "Yahoo", iconName: "yahoo-logo", iconColor: Color(hex:"#6001D2")) { print("Yahoo Tapped") },
         Provider(name: "Office365", iconName: "office-logo", iconColor: nil) { print("Office365 Tapped") },
@@ -39,16 +40,25 @@ struct AddAccountProviderView: View {
                 LazyVGrid(columns: columns, spacing: 30) {
                     ForEach(providers) { provider in
                         if provider.name == "Gmail" {
-                            // Use GoogleSignInButton for consistent styling (optional)
-                             GoogleSignInButton(action: handleSignInButton)
-                                .frame(width: 60, height: 60) // Adjust size if needed
-                                .clipShape(Circle())
-                                .shadow(radius: 3, x: 1, y: 2)
-                                .overlay(Circle().stroke(Color.gray.opacity(0.3), lineWidth: 1)) // Optional border
-                                .padding(.bottom, 5) // Add space for text below
-                             Text(provider.name)
-                                .font(.caption)
-                                .foregroundColor(.primary)
+                            // Use the custom asset for the Gmail button
+                            Button(action: handleSignInButton) { // Attach action here
+                                VStack {
+                                    ZStack {
+                                        Circle()
+                                            .fill(provider.iconColor ?? Color(.systemGray5)) // Use defined color
+                                            .frame(width: 60, height: 60)
+                                            .shadow(radius: 3, x: 1, y: 2)
+                                        
+                                        Image(provider.iconName) // Use the asset name
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 35, height: 35) 
+                                    }
+                                    Text(provider.name)
+                                        .font(.caption)
+                                        .foregroundColor(.primary)
+                                }
+                            }
                         } else {
                             // Keep other providers as disabled buttons
                             Button {

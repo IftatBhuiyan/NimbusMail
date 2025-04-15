@@ -36,31 +36,33 @@ struct SideMenuView: View {
 
     var body: some View {
         ScrollView { 
-            VStack(alignment: .leading, spacing: 15) { // Keep overall vertical spacing
+            VStack(alignment: .leading, spacing: 5) { // Reduced overall spacing
                 // 1. Header
                 Text("Lunar Mail")
-                    .font(.largeTitle).fontWeight(.bold)
+                    .font(.title).fontWeight(.bold) // Slightly smaller title
                     .foregroundColor(neumorphicTextColor)
-                    .padding(.leading) // Add leading padding
-                    .padding(.bottom, 10)
+                    .padding(.leading)
+                    .padding(.top, 20) // Added top padding
+                    .padding(.bottom, 5) // Reduced bottom padding
                 
-                Divider().padding(.bottom, 10)
+                Divider().padding(.bottom, 5)
 
                 // --- Top Level Items --- 
-                // Apply consistent leading padding here
                 Group {
-                    // 2. All Inboxes
+                    // 2. All Inboxes Button
                     Button {
-                        print("Go to All Inboxes")
+                        viewModel.selectedAccountFilter = nil
+                        viewModel.selectedLabelFilter = nil // Ensure label filter is also cleared
+                        withAnimation { isShowing = false } 
+                        print("Selected Filter: All Inboxes")
                     } label: {
                         Label("All Inboxes", systemImage: "tray.and.arrow.down.fill")
                     }
-                    .buttonStyle(NeumorphicSideMenuItemStyle()) 
+                    .buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
                     
-                    Divider().padding(.vertical, 10)
+                    Divider().padding(.vertical, 5) // Reduced divider padding
 
-                    // 3. Individual Accounts (Use viewModel.addedAccounts)
-                    // Use ForEach directly on viewModel.addedAccounts
+                    // 3. Individual Accounts
                     ForEach(viewModel.addedAccounts) { account in 
                         DisclosureGroup(
                             isExpanded: Binding(
@@ -72,74 +74,162 @@ struct SideMenuView: View {
                                     }
                                 }
                             ),
-                            content: { // Placeholder for Folders (Load dynamically later)
-                                VStack(alignment: .leading) {
-                                    // TODO: Load actual folders for the account
-                                    Text("(Placeholder Inbox)").font(.subheadline).padding(.leading, 15)
-                                    Text("(Placeholder Sent)").font(.subheadline).padding(.leading, 15)
+                            content: { // Display fetched labels
+                                VStack(alignment: .leading, spacing: 4) { // Reduced spacing for labels
+                                    if viewModel.isFetchingLabels[account.emailAddress] == true {
+                                        ProgressView()
+                                            .padding(.leading, 15)
+                                            .frame(maxWidth: .infinity, alignment: .center)
+                                    } else if let labels = viewModel.labelsByAccount[account.emailAddress], !labels.isEmpty {
+                                        // Define the desired order of label IDs (case-insensitive comparison)
+                                        let preferredOrder: [String] = [
+                                            "INBOX",
+                                            "CATEGORY_PRIMARY",
+                                            "STARRED",
+                                            "IMPORTANT",
+                                            "SENT",
+                                            "DRAFT",
+                                            "SNOOZED",
+                                            "SCHEDULED",
+                                            "SPAM",
+                                            "TRASH",
+                                            "ALL"
+                                        ]
+                                        let preferredOrderSet = Set(preferredOrder) // Use Set for faster lookup
+
+                                        let filteredLabels = labels.filter { label in
+                                            // Only keep labels that are in the preferredOrder list
+                                            guard let id = label.identifier?.uppercased() else { return false }
+                                            return preferredOrderSet.contains(id)
+                                        }.sorted { label1, label2 in
+                                           // Sorting logic remains the same, but only applies to preferred labels
+                                           let id1 = label1.identifier?.uppercased() ?? ""
+                                           let id2 = label2.identifier?.uppercased() ?? ""
+                                           
+                                           // Find index in the original array to maintain defined order
+                                           let index1 = preferredOrder.firstIndex(of: id1)
+                                           let index2 = preferredOrder.firstIndex(of: id2)
+                                           
+                                           // Since we filtered beforehand, both should ideally be found
+                                           // Handle potential nil just in case, but prioritize index order
+                                           if let index1 = index1, let index2 = index2 {
+                                               return index1 < index2
+                                           } else if index1 != nil {
+                                               return true // label1 is preferred, comes first
+                                           } else if index2 != nil {
+                                               return false // label2 is preferred, comes first
+                                           } else {
+                                               // Should not happen if filter worked, but fallback to name
+                                               return (label1.name ?? "") < (label2.name ?? "")
+                                           }
+                                        }
+                                        
+                                        ForEach(filteredLabels, id: \.identifier) { label in
+                                            Button {
+                                                viewModel.selectedAccountFilter = account.emailAddress // Set account context
+                                                viewModel.selectedLabelFilter = label.identifier
+                                                withAnimation { isShowing = false } 
+                                                print("Tapped label: \(label.name ?? "N/A") (ID: \(label.identifier ?? "N/A"))")
+                                            } label: {
+                                                // Simple Label display (can customize with icons)
+                                                Label((label.name ?? "Unknown Label").capitalized, systemImage: labelIcon(for: label.identifier))
+                                                    .font(.subheadline)
+                                            }
+                                            .buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
+                                            .padding(.leading, 15)
+                                        }
+                                    } else {
+                                        Text("(No folders found)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                            .padding(.leading, 15)
+                                    }
+                                    
+                                    // --- Add Static All Mail Button Here (After Fetched Labels) --- 
+                                    Button {
+                                        viewModel.selectedAccountFilter = account.emailAddress // Ensure account context
+                                        viewModel.selectedLabelFilter = nil // nil signifies All Mail
+                                        withAnimation { isShowing = false } // Close menu
+                                        print("Tapped label: All Mail (nil) for \(account.emailAddress)")
+                                    } label: {
+                                        Label("All Mail", systemImage: "tray.full.fill") // Use suitable icon
+                                            .font(.subheadline)
+                                    }
+                                    .buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
+                                    .padding(.leading, 15) // Indent like other labels
+                                    // --- End Static All Mail Button ---
                                 }
                                 .padding(.leading, 10)
-                                .padding(.top, 5)
+                                .padding(.vertical, 5) // Reduced vertical padding
+                                .onAppear { 
+                                    viewModel.fetchLabels(for: account)
+                                }
                             },
                             label: { 
-                                 Label(account.emailAddress, systemImage: "envelope.fill")
+                                Button {
+                                    viewModel.selectedAccountFilter = account.emailAddress
+                                    viewModel.selectedLabelFilter = "INBOX"
+                                    withAnimation { isShowing = false } 
+                                    print("Selected Filter: \(account.emailAddress), Label: INBOX")
+                                } label: {
+                                     Label(account.emailAddress, systemImage: "envelope.fill")
+                                         .font(.subheadline) // Make account labels slightly smaller
+                                }
+                                .buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
                             }
                         )
-                        .buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: true)) 
-                        .accentColor(neumorphicTextColor) 
-                        .padding(.vertical, 5)
+                        .accentColor(neumorphicTextColor)
+                        .padding(.vertical, 0) // Remove vertical padding around disclosure group
                     }
                     
                     // 4. Add Account Button
                     Button {
                         print("Add Account Tapped")
-                        showingAddAccountSheet = true // Trigger the sheet
-                        withAnimation {
-                            isShowing = false // Optionally close side menu
-                        }
+                        showingAddAccountSheet = true
+                        withAnimation { isShowing = false } 
                     } label: {
                         Label("Add Account", systemImage: "plus")
                     }
-                    .buttonStyle(NeumorphicSideMenuItemStyle())
-                    .padding(.top, 10)
+                    .buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
+                    .padding(.top, 5) // Reduced top padding
                     
-                    Divider().padding(.vertical, 10)
+                    Divider().padding(.vertical, 5) // Reduced divider padding
                     
                     // 5. Combined Categories (Static for now)
-                    // TODO: Define these properly based on combined logic
-                    Button { print("Go to Combined Inbox") } label: { Label("Inbox", systemImage: "tray.2.fill") }.buttonStyle(NeumorphicSideMenuItemStyle())
-                    Button { print("Go to Combined Sent") } label: { Label("Sent", systemImage: "paperplane.fill") }.buttonStyle(NeumorphicSideMenuItemStyle())
-                    Button { print("Go to Combined Drafts") } label: { Label("Drafts", systemImage: "doc.fill") }.buttonStyle(NeumorphicSideMenuItemStyle())
+                    Button { print("Go to Pinned") } label: { Label("Pinned", systemImage: "pin.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
+                    Button { print("Go to Unread") } label: { Label("Unread", systemImage: "envelope.badge.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
+                    Button { print("Go to Sent") } label: { Label("Sent", systemImage: "paperplane.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
+                    Button { print("Go to Drafts") } label: { Label("Drafts", systemImage: "doc.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
+                    Button { print("Go to Scheduled") } label: { Label("Scheduled", systemImage: "clock.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
+                    Button { print("Go to Archive") } label: { Label("Archive", systemImage: "archivebox.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
+                    Button { print("Go to Trash") } label: { Label("Trash", systemImage: "trash.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
                 }
-                .padding(.horizontal) // Apply consistent horizontal padding to top-level items
+                .padding(.horizontal)
                 
-                Spacer() // Pushes Settings/Logout down 
+                Spacer() 
                  
             } // End Main VStack
-             // Remove overall padding here: .padding()
             
             // Settings/Logout section at the very bottom
             VStack(alignment: .leading, spacing: 0) { 
-                 Divider().padding(.bottom, 15)
+                 Divider().padding(.bottom, 10) // Reduced padding
                  Button {
                     print("Go to Settings")
                  } label: {
                     Label("Settings", systemImage: "gear")
                  }
-                 .buttonStyle(NeumorphicSideMenuItemStyle()) 
-                 .padding(.bottom, 10) 
+                 .buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false)) 
+                 .padding(.bottom, 5) // Reduced padding
                  
                  Button {
-                     Task {
-                         viewModel.signOut()
-                     }
+                     Task { viewModel.signOut() }
                  } label: {
                      Label("Logout", systemImage: "arrow.right.square")
                  }
-                 .buttonStyle(NeumorphicSideMenuItemStyle()) 
+                 .buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false)) 
             }
-            .padding(.horizontal) // Match horizontal padding
-            .padding(.bottom, 30) // Bottom padding
+            .padding(.horizontal) 
+            .padding(.bottom, 20) // Reduced bottom padding
         }
     }
     
@@ -162,6 +252,22 @@ struct SideMenuView: View {
              .shadow(color: darkDropShadowColor, radius: darkDropShadowBlur / 2, x: darkDropShadowX / 2, y: darkDropShadowY / 2)
              .shadow(color: lightDropShadowColor, radius: lightDropShadowBlur / 2, x: lightDropShadowX / 2, y: lightDropShadowY / 2)
     }
+
+    // Helper to get an appropriate icon for a label ID
+    private func labelIcon(for identifier: String?) -> String {
+        guard let id = identifier?.uppercased() else { return "folder" }
+        switch id {
+            case "INBOX": return "tray.fill"
+            case "SENT": return "paperplane.fill"
+            case "DRAFT": return "doc.fill"
+            case "SPAM": return "xmark.bin.fill"
+            case "TRASH": return "trash.fill"
+            case "IMPORTANT": return "exclamationmark.circle.fill"
+            case "STARRED": return "star.fill"
+            // Add more system labels if needed (e.g., CATEGORY_SOCIAL, etc.)
+            default: return "folder" // Default for user labels
+        }
+    }
 }
 
 // --- Custom Button Style for Neumorphic Menu Items --- 
@@ -177,42 +283,26 @@ struct NeumorphicSideMenuItemStyle: ButtonStyle {
                 .foregroundColor(neumorphicTextColor)
             Spacer()
         }
-        .padding(.vertical) // Vertical padding only inside style
-        .padding(.horizontal, 0) // Remove horizontal padding inside style
+        .padding(.vertical, 10) // Reduced vertical padding within items
+        .padding(.horizontal, 0) 
         .background(
             ZStack {
                 Color.clear 
+                
                 if configuration.isPressed {
-                     RoundedRectangle(cornerRadius: 10)
+                     RoundedRectangle(cornerRadius: 8) // Slightly smaller corner radius
                         .fill(Color(hex: "E0E5EC")) 
                         .stroke(Color(hex: "E0E5EC"), lineWidth: 4) 
                         .shadow(color: darkPressedShadowColor, radius: 3, x: 3, y: 3) 
                         .shadow(color: lightPressedShadowColor, radius: 3, x: -3, y: -3) 
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
             }
         )
-        .cornerRadius(10)
+        .cornerRadius(8) // Slightly smaller corner radius
         .scaleEffect(configuration.isPressed ? 0.98 : 1.0) 
         .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 
-struct SideMenuView_Previews: PreviewProvider {
-    static var previews: some View {
-        // Add mock accounts to the preview view model
-        let mockAccounts = [
-             EmailAccount(emailAddress: "preview1@example.com", provider: "gmail"),
-             EmailAccount(emailAddress: "preview2@work.com", provider: "exchange")
-        ]
-        let mockViewModel = UserViewModel(isAuthenticated: true,
-                                        userEmail: "preview1@example.com", 
-                                        userName: "Preview User",
-                                        addedAccounts: mockAccounts) // Pass mock accounts
-        
-        SideMenuView(isShowing: .constant(true), showingAddAccountSheet: .constant(false))
-            .environmentObject(mockViewModel)
-            .background(Color(hex: "E0E5EC").edgesIgnoringSafeArea(.all)) // Use neumorphic bg
-            .frame(width: 300) 
-    }
-} 
+// struct SideMenuView_Previews: PreviewProvider { ... } // Remove this entire block 

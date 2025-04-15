@@ -16,8 +16,14 @@ class UserViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var addedAccounts: [EmailAccount] = []
-    @Published var inboxEmails: [EmailDisplayData] = [] // Use new name
+    @Published var emailsByAccount: [String: [EmailDisplayData]] = [:]
     @Published var isFetchingEmails = false // Loading state for email fetch
+    @Published var selectedAccountFilter: String? = nil // nil means All Inboxes
+    @Published var labelsByAccount: [String: [GTLRGmail_Label]] = [:] // To store labels per account
+    @Published var isFetchingLabels: [String: Bool] = [:] // Loading state per account for labels
+    @Published var selectedLabelFilter: String? = nil // ID of the selected label/folder
+    @Published var nextPageTokens: [String: String?] = [:] // Store next page token per account filter key
+    @Published var isFetchingMoreEmails: Bool = false // Loading state for pagination
     
     // Computed property for suggested contacts
     var suggestedContacts: [String] {
@@ -57,6 +63,35 @@ class UserViewModel: ObservableObject {
     private var authService: AuthenticationService?
     private var cancellables = Set<AnyCancellable>()
     
+    // Computed property to flatten emails for display (can be filtered later)
+    var inboxEmails: [EmailDisplayData] {
+        let filteredByAccount: [EmailDisplayData]
+        if let selectedAccount = selectedAccountFilter {
+            // Filter by selected account
+            filteredByAccount = emailsByAccount[selectedAccount] ?? []
+        } else {
+            // Show all accounts (flattened)
+            filteredByAccount = emailsByAccount.values.flatMap { $0 }
+        }
+
+        // Further filter by selected label if one is chosen
+        let filteredByLabel: [EmailDisplayData]
+        if let selectedLabel = selectedLabelFilter {
+            filteredByLabel = filteredByAccount.filter { email in
+                // Check if the email's labelIds array contains the selected label ID
+                email.labelIds?.contains(selectedLabel) ?? false
+            }
+        } else {
+            // If no label is selected, show all emails for the selected account(s)
+            // We might want a default filter here (e.g., INBOX) if selectedAccountFilter is set
+            // but selectedLabelFilter is nil. For now, show all.
+            filteredByLabel = filteredByAccount
+        }
+        
+        // Sort the final list
+        return filteredByLabel.sorted { $0.date > $1.date }
+    }
+    
     // Default Initializer (for live app)
     init() {
         self.authService = AuthenticationService.shared // Assign here
@@ -90,12 +125,12 @@ class UserViewModel: ObservableObject {
     }
     
     // Initializer for Previews & Testing
-    init(isAuthenticated: Bool, userEmail: String?, userName: String?, addedAccounts: [EmailAccount] = [], inboxEmails: [EmailDisplayData] = []) { // Use new name
+    init(isAuthenticated: Bool, userEmail: String?, userName: String?, addedAccounts: [EmailAccount] = [], emailsByAccount: [String: [EmailDisplayData]] = [:]) { // Update parameter
         self.isAuthenticated = isAuthenticated
         self.userEmail = userEmail
         self.userName = userName
         self.addedAccounts = addedAccounts // Initialize accounts for preview
-        self.inboxEmails = inboxEmails // Initialize for preview
+        self.emailsByAccount = emailsByAccount // Initialize for preview
     }
     
     // MARK: - Account Management
@@ -116,6 +151,7 @@ class UserViewModel: ObservableObject {
             print("Account added: \(email)")
             // Fetch emails for the newly added account
             fetchInboxMessages(for: newAccount)
+            fetchLabels(for: newAccount)
         } else {
             print("Account already exists: \(email)")
             // Optionally update existing account info/tokens if needed
@@ -143,62 +179,165 @@ class UserViewModel: ObservableObject {
         // If token exists, create an EmailAccount and add to addedAccounts
         print("Placeholder: loadAccounts() called. Implement persistence.")
         // self.addedAccounts = previouslySavedAccounts
+        // TODO: After loading accounts, fetch labels for each
+        // for account in self.addedAccounts {
+        //     fetchLabels(for: account)
+        // }
     }
     
-    // MARK: - Email Fetching
-    
-    // Fetches emails for all added accounts, replacing the old logic
-    func fetchAllInboxMessages() { // Keep name for now, but fetches threads
-        guard !isFetchingEmails else { return }
-        print("Starting fetch for all account inboxes (fetching threads)...")
-        isFetchingEmails = true
-        inboxEmails = [] // Clear existing emails before fetching
-        errorMessage = nil
-        
-        // Assume primary account for now, adjust if multi-account support needed here
-        guard let primaryAccount = addedAccounts.first else {
-            print("No primary account configured.")
-            errorMessage = "No account configured to fetch emails."
-            isFetchingEmails = false
-            return
-        }
+    // MARK: - Label Fetching
 
-        // Call the new thread fetching service method
-        GmailAPIService.shared.fetchInboxThreads(for: primaryAccount, maxTotalThreads: 50) { [weak self] result in
-            guard let self = self else { return }
-            
-            Task { // Perform mapping and state update on MainActor
+    func fetchLabels(for account: EmailAccount) {
+        let accountEmail = account.emailAddress
+        // Avoid redundant fetches if already loading or labels exist
+        guard isFetchingLabels[accountEmail] != true, labelsByAccount[accountEmail] == nil else {
+             print("Labels already fetched or currently fetching for \(accountEmail)")
+             return
+        }
+        
+        print("Fetching labels for \(accountEmail)")
+        isFetchingLabels[accountEmail] = true
+        
+        // Call the service
+        GmailAPIService.shared.fetchLabels(for: account) { [weak self] result in
+            // Update state on main thread
+            Task {
                 await MainActor.run {
-                    self.isFetchingEmails = false
+                    guard let self = self else { return }
+                    self.isFetchingLabels[accountEmail] = false // Mark loading as complete
                     switch result {
-                    case .success(let threads):
-                        print("Successfully fetched \(threads.count) threads. Processing...")
-                        self.inboxEmails = self.mapAndStructureThreads(threads)
-                        print("Finished processing threads. Inbox count: \(self.inboxEmails.count)")
-                        // --- Inject mock threaded email (keeping for reference) ---
-                        self.injectMockThread() 
-                        // --- End mock injection ---
-                        
+                    case .success(let labels):
+                        self.labelsByAccount[accountEmail] = labels
+                        print("Successfully stored \(labels.count) labels for \(accountEmail).")
+                        // --- Add Logging --- 
+                        print("Fetched Label IDs/Names for \(accountEmail):")
+                        labels.forEach { print("  ID: \($0.identifier ?? "N/A"), Name: \($0.name ?? "N/A"), Type: \($0.type ?? "N/A")") }
+                        // --- End Logging ---
+                        // TODO: Potentially trigger UI update if SideMenuView depends on this directly
                     case .failure(let error):
-                        print("Failed to fetch threads: \(error.localizedDescription)")
-                        self.errorMessage = "Failed to load emails: \(error.localizedDescription)"
-                        // Consider keeping mock thread even on failure for UI testing
-                        self.injectMockThread() 
+                        // Handle error (e.g., update errorMessage)
+                        print("Failed to fetch labels for \(accountEmail): \(error.localizedDescription)")
+                        self.errorMessage = "Failed to load folders for \(accountEmail)."
                     }
                 }
             }
         }
     }
+
+    // MARK: - Email Fetching
     
-    // --- New Thread Processing Logic ---
-    private func mapAndStructureThreads(_ threads: [GTLRGmail_Thread]) -> [EmailDisplayData] {
+    // Fetches emails for all added accounts, replacing the old logic
+    func fetchAllInboxMessages() { // Keep name for now, but fetches threads
+        guard !isFetchingEmails else { return }
+        guard !addedAccounts.isEmpty else {
+            print("No accounts configured. Skipping fetch.")
+            // Clear the dictionary if no accounts exist
+            Task { await MainActor.run { self.emailsByAccount = [:] } }
+            return
+        }
+        print("Starting fetch for all account inboxes (fetching threads)...")
+        isFetchingEmails = true
+        errorMessage = nil
+
+        // --- Clear existing data for a fresh fetch --- 
+        self.emailsByAccount = [:]
+        self.nextPageTokens = [:]
+        // --- End Clear ---
+
+        // Use a TaskGroup to fetch for all accounts concurrently
+        Task {
+            var allFetchedEmailsByAccount: [String: [EmailDisplayData]] = [:] // Temporary dictionary
+            var fetchError: Error? = nil
+
+            // --- Capture filter state before entering TaskGroup --- 
+            let currentAccountFilter = self.selectedAccountFilter
+            let currentLabelFilter = self.selectedLabelFilter
+            // --- End capture --- 
+
+            await withTaskGroup(of: (String, Result<([GTLRGmail_Thread], String?), Error>).self) { group in
+                for account in addedAccounts {
+                    group.addTask {
+                        // Determine fetch parameters based on selected filters
+                        var fetchLabelIds: [String]? = nil
+                        var fetchSearchQuery: String? = nil
+
+                        // Apply filters ONLY if this account is the selected one
+                        // OR if no account is selected (All Inboxes)
+                        // Use the captured filter state here
+                        if currentAccountFilter == nil || currentAccountFilter == account.emailAddress {
+                            if let selectedLabel = currentLabelFilter {
+                                fetchLabelIds = [selectedLabel]
+                            } else {
+                                // If account is selected but no label, fetch "All Mail" for that account
+                                // If no account selected (All Inboxes), also fetch "All Mail" for this account
+                                fetchSearchQuery = "-label:spam -label:trash"
+                            }
+                        } else {
+                            // If this account isn't selected, don't fetch anything for it in this context
+                            // (or fetch default like INBOX if needed later)
+                            // Returning empty success to avoid breaking the group structure
+                            return (account.emailAddress, .success(([], nil))) 
+                        }
+                        
+                        // Use await for the async fetch call with parameters
+                        let result = await self.fetchThreadsForAccountAsync(account: account, labelIds: fetchLabelIds, searchQuery: fetchSearchQuery)
+                        return (account.emailAddress, result)
+                    }
+                }
+
+                // Collect results from the group
+                for await (accountEmail, result) in group {
+                    switch result {
+                    case .success(let threads):
+                        print("Successfully fetched \(threads.0.count) threads for \(accountEmail). Processing...")
+                        // Map threads, passing the account email
+                        let mappedEmails = self.mapAndStructureThreads(threads.0, for: accountEmail)
+                        allFetchedEmailsByAccount[accountEmail] = mappedEmails
+                        print("Finished processing threads for \(accountEmail). Count: \(mappedEmails.count)")
+                        self.nextPageTokens[accountEmail] = threads.1
+                    case .failure(let error):
+                        print("Failed to fetch threads for \(accountEmail): \(error.localizedDescription)")
+                        fetchError = error // Store the first encountered error
+                    }
+                }
+            }
+
+            // Update state on the main thread after all fetches complete
+            await MainActor.run {
+                self.isFetchingEmails = false
+                // Update the main dictionary with the fetched results
+                self.emailsByAccount = allFetchedEmailsByAccount
+                
+                if let error = fetchError {
+                    // Optionally, set a general error message if any fetch failed
+                    self.errorMessage = "Failed to load some emails: \(error.localizedDescription)"
+                }
+                // TODO: Re-evaluate if mock injection is still needed here
+                // self.injectMockThread() // Inject mock after fetching real data
+            }
+        }
+    }
+
+    // Async helper to fetch threads for a single account
+    // Updated to accept labelIds and searchQuery
+    private func fetchThreadsForAccountAsync(account: EmailAccount, labelIds: [String]? = nil, searchQuery: String? = nil, pageToken: String? = nil) async -> Result<([GTLRGmail_Thread], String?), Error> {
+        await withCheckedContinuation { continuation in
+            // Pass parameters to the service
+            GmailAPIService.shared.fetchInboxThreads(for: account, labelIds: labelIds, searchQuery: searchQuery, pageToken: pageToken, maxTotalThreads: 50) { result in // Limit threads per account
+                continuation.resume(returning: result)
+            }
+        }
+    }
+    
+    // --- Updated Thread Processing Logic ---
+    private func mapAndStructureThreads(_ threads: [GTLRGmail_Thread], for accountEmail: String) -> [EmailDisplayData] {
         var structuredEmails: [EmailDisplayData] = []
 
         for thread in threads {
             guard let messages = thread.messages, !messages.isEmpty else { continue }
 
-            // Map all messages in the thread using the existing mapper
-            var mappedMessages = messages.compactMap { self.mapGTLRMessageToEmailDisplayData($0) }
+            // Map all messages in the thread, passing the account email
+            var mappedMessages = messages.compactMap { self.mapGTLRMessageToEmailDisplayData($0, accountEmail: accountEmail) }
             
             // Sort messages by date (oldest first for building history)
             mappedMessages.sort { $0.date < $1.date }
@@ -236,6 +375,9 @@ class UserViewModel: ObservableObject {
     
     // Helper to inject mock thread (extracted for reuse)
     private func injectMockThread() {
+        // Define a mock account email for the mock thread
+        let mockAccountEmail = "mock.user@example.com"
+        
         let mockOriginal = EmailDisplayData(
             gmailMessageId: "originalMsgId",
             threadId: "mockThread1",
@@ -249,7 +391,9 @@ class UserViewModel: ObservableObject {
             body: "Hi Bob,\n\nHere's the initial update on the project.\n\nBest,\nAlice",
             date: Calendar.current.date(byAdding: .day, value: -2, to: Date())!,
             isRead: true,
-            previousMessages: nil
+            previousMessages: nil,
+            accountEmail: mockAccountEmail, // Add mock account email
+            labelIds: nil // No label IDs for mock original
         )
         let mockReply1 = EmailDisplayData(
             gmailMessageId: "reply1MsgId",
@@ -264,7 +408,9 @@ class UserViewModel: ObservableObject {
             body: "Hi Alice,\n\nThanks for the update! A couple of questions...\n\nBest,\nBob",
             date: Calendar.current.date(byAdding: .day, value: -1, to: Date())!,
             isRead: true,
-            previousMessages: [mockOriginal]
+            previousMessages: [mockOriginal],
+            accountEmail: mockAccountEmail, // Add mock account email
+            labelIds: nil // No label IDs for mock reply
         )
         let mockReply2 = EmailDisplayData(
             gmailMessageId: "reply2MsgId",
@@ -279,13 +425,19 @@ class UserViewModel: ObservableObject {
             body: "Hi Bob,\n\nHere are answers to your questions...\n\nBest,\nAlice",
             date: Date(),
             isRead: false,
-            previousMessages: [mockReply1]
+            previousMessages: [mockReply1],
+            accountEmail: mockAccountEmail, // Add mock account email
+            labelIds: nil // No label IDs for mock reply
         )
         
-        // Remove any previous mock thread if present
-        inboxEmails.removeAll { $0.threadId == "mockThread1" }
-        // Insert mock thread at the top
-        inboxEmails.insert(mockReply2, at: 0)
+        // Update the dictionary for the mock account
+        var currentMocks = self.emailsByAccount[mockAccountEmail] ?? []
+        // Remove any previous mock thread from this account's list
+        currentMocks.removeAll { $0.threadId == "mockThread1" }
+        // Insert mock thread at the top of this account's list
+        currentMocks.insert(mockReply2, at: 0)
+        // Update the dictionary
+        self.emailsByAccount[mockAccountEmail] = currentMocks
     }
     
     // --- End Thread Processing Logic ---
@@ -303,8 +455,8 @@ class UserViewModel: ObservableObject {
     }
     */
 
-    // Mapping function (adjust based on EmailDisplayData properties)
-    private func mapGTLRMessageToEmailDisplayData(_ gtlrMessage: GTLRGmail_Message) -> EmailDisplayData { // Renamed function
+    // Mapping function - Add accountEmail parameter
+    private func mapGTLRMessageToEmailDisplayData(_ gtlrMessage: GTLRGmail_Message, accountEmail: String) -> EmailDisplayData? { // Renamed & added param
         // Extract headers - Requires careful parsing
         var subject = "No Subject"
         var from = "Unknown Sender"
@@ -405,7 +557,9 @@ class UserViewModel: ObservableObject {
             body: "", // Body not fetched with metadata
             date: date, // Use the date determined above (prioritizing internalDate)
             isRead: !(gtlrMessage.labelIds?.contains("UNREAD") ?? false), // Check for UNREAD label
-            previousMessages: nil // Not fetched with metadata
+            previousMessages: nil, // Not fetched with metadata
+            accountEmail: accountEmail, // Assign the account email
+            labelIds: gtlrMessage.labelIds // Assign label IDs from the message
         )
     }
 
@@ -448,30 +602,138 @@ class UserViewModel: ObservableObject {
         return nil
     }
 
-    // Fetches for a single account (called when adding account)
+    // Fetches for a single account (called when adding account) - Updated Logic
     private func fetchInboxMessages(for account: EmailAccount) {
-         // Trigger a full refresh of the inbox, which now fetches threads
-         print("Triggering full inbox refresh after adding account: \(account.emailAddress)")
-         self.fetchAllInboxMessages()
-         /* // Remove old logic
-         // Fetch only enough IDs for initial display
-         GmailAPIService.shared.fetchInboxMessages(for: account, maxTotalMessages: 50) { [weak self] result in 
-             guard let self = self else { return }
-             // Similar to above, but likely wouldn't immediately update the main inboxEmails
-             // Might update a per-account cache or trigger a refresh of fetchAllInboxMessages
-             switch result {
-             case .success(let messageInfos): // Renamed for clarity
-                 print("Fetched \(messageInfos.count) initial message IDs for newly added account \(account.emailAddress)")
-                 // Trigger detail fetch for these IDs
-                  // self.fetchDetailsForMessages(messageInfos) // This function is now commented out
-             case .failure(let error):
-                 // Corrected print statement
-                 print("Failed fetch for new account \(account.emailAddress): \(error.localizedDescription)")
-                 // Optionally set error message
-                 self.isFetchingEmails = false // Make sure loading stops on error
-             }
-         }
-         */
+        // Fetch specifically for the new account and add to the dictionary
+        print("Fetching inbox for newly added account: \(account.emailAddress)")
+        
+        // Use a Task to perform the fetch asynchronously
+        Task {
+            // Fetch only the INBOX when adding a new account
+            let result = await fetchThreadsForAccountAsync(account: account, labelIds: ["INBOX"])
+            
+            // Update state on the main thread
+            await MainActor.run {
+                // Remove this line - token will be set/cleared by the result processing
+                // self.nextPageTokens[account.emailAddress] = nil 
+                
+                switch result {
+                case .success(let threads): // threads is ([GTLRGmail_Thread], String?)
+                    print("Fetched \(threads.0.count) threads for new account \(account.emailAddress). Mapping...")
+                    let mappedEmails = self.mapAndStructureThreads(threads.0, for: account.emailAddress)
+                    // Merge new emails with existing emails for this account
+                    var currentEmails = self.emailsByAccount[account.emailAddress] ?? []
+                    // Basic merging: Add new emails, avoid duplicates based on gmailMessageId
+                    let existingIds = Set(currentEmails.map { $0.gmailMessageId })
+                    for newEmail in mappedEmails {
+                        if !existingIds.contains(newEmail.gmailMessageId) {
+                            currentEmails.append(newEmail)
+                        }
+                    }
+                    // Sort the combined list for the account
+                    currentEmails.sort { $0.date > $1.date }
+                    self.emailsByAccount[account.emailAddress] = currentEmails
+                    // --- Store the next page token --- 
+                    self.nextPageTokens[account.emailAddress] = threads.1
+                    print("Updated inbox for \(account.emailAddress). Total emails: \(currentEmails.count). Next Token: \(threads.1 ?? "nil")")
+                case .failure(let error):
+                    print("Failed fetch for new account \(account.emailAddress): \(error.localizedDescription)")
+                    // Clear token on failure
+                    self.nextPageTokens[account.emailAddress] = nil
+                    // Optionally set an error message specific to this account or a general one
+                    self.errorMessage = "Failed to load emails for \(account.emailAddress): \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+    
+    // MARK: - Pagination Logic
+
+    func fetchMoreEmailsIfNeeded(currentItem item: EmailDisplayData?) {
+        guard let item = item else {
+            // If item is nil, maybe fetch if list is very short and token exists?
+            // For now, require an item to trigger pagination.
+            return
+        }
+
+        let thresholdIndex = inboxEmails.index(inboxEmails.endIndex, offsetBy: -5) // Trigger fetch 5 items from end
+        if inboxEmails.firstIndex(where: { $0.id == item.id }) == thresholdIndex {
+            
+            // Determine the account key to check for page token
+            // Use selectedAccountFilter if set, otherwise maybe handle "All Inboxes" differently?
+            // For now, pagination primarily works when a single account is selected.
+            guard let accountKey = selectedAccountFilter else {
+                 print("Pagination: Currently only supported when a single account is selected.")
+                 return
+            }
+            
+            // Check if there's a next page token for the current filter and not already fetching
+            // --- Add Logging ---
+            let tokenForAccount = nextPageTokens[accountKey]
+            print("Pagination Check: accountKey=\(accountKey), isFetchingMore=\(isFetchingMoreEmails), storedToken=\(String(describing: tokenForAccount)), tokenIsNotNil=\(tokenForAccount != nil)")
+            // --- End Logging ---
+            guard let token = nextPageTokens[accountKey], token != nil, !isFetchingMoreEmails else {
+                // print("Pagination: No next page token for \(accountKey ?? "All") or already fetching.")
+                return
+            }
+            
+            print("Pagination: Threshold reached, fetching next page for \(accountKey) with token: \(token ?? "nil")")
+            isFetchingMoreEmails = true
+
+            // Reuse the captured filters from fetchAllInboxMessages if possible?
+            // Re-capture or pass filters explicitly. For simplicity, re-capture.
+            let currentLabelFilter = self.selectedLabelFilter
+            
+            Task {
+                var fetchLabelIds: [String]? = nil
+                var fetchSearchQuery: String? = nil
+
+                if let selectedLabel = currentLabelFilter {
+                    fetchLabelIds = [selectedLabel]
+                } else {
+                    // Fetching more for "All Mail" view for this account
+                    fetchSearchQuery = "-label:spam -label:trash"
+                }
+                
+                // Fetch next page for the specific account
+                let result = await fetchThreadsForAccountAsync(account: EmailAccount(emailAddress: accountKey, provider: "gmail"), // Need EmailAccount object
+                                                             labelIds: fetchLabelIds,
+                                                             searchQuery: fetchSearchQuery,
+                                                             pageToken: token)
+                                                             
+                await MainActor.run {
+                    self.isFetchingMoreEmails = false
+                    switch result {
+                    case .success(let (newThreads, nextToken)):
+                        print("Pagination: Successfully fetched \(newThreads.count) more threads for \(accountKey).")
+                        // Map the new threads
+                        let mappedEmails = self.mapAndStructureThreads(newThreads, for: accountKey)
+                        // Append to existing list for that account
+                        var currentEmails = self.emailsByAccount[accountKey] ?? []
+                        let existingIds = Set(currentEmails.map { $0.gmailMessageId })
+                        var addedCount = 0
+                        for newEmail in mappedEmails {
+                            if !existingIds.contains(newEmail.gmailMessageId) {
+                                currentEmails.append(newEmail)
+                                addedCount += 1
+                            }
+                        }
+                        // Re-sort might be needed if dates are interleaved, but usually append works
+                        // currentEmails.sort { $0.date > $1.date }
+                        self.emailsByAccount[accountKey] = currentEmails
+                        // Store the *new* next page token for this account
+                        self.nextPageTokens[accountKey] = nextToken
+                        print("Pagination: Appended \(addedCount) new emails for \(accountKey). New next token: \(nextToken ?? "nil")")
+                        
+                    case .failure(let error):
+                        print("Pagination: Failed to fetch next page for \(accountKey): \(error.localizedDescription)")
+                        // Clear token on error?
+                        self.nextPageTokens[accountKey] = nil 
+                        self.errorMessage = "Failed to load more emails."
+                    }
+                }
+            }
+        }
     }
     
     // MARK: - Authentication Methods

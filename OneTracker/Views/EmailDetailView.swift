@@ -64,6 +64,27 @@ struct EmailDetailView: View {
                     .padding()
                     .background(neumorphicBackgroundStyle())
                     
+                    // --- Display Labels/Tags --- 
+                    if let labelIds = email.labelIds, !labelIds.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack {
+                                ForEach(labelIds, id: \.self) { labelId in
+                                    // You might want to map IDs to names if you fetched labels
+                                    // For now, just display the ID (cleaned up)
+                                    Text(formatLabelId(labelId))
+                                        .font(.caption)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.gray.opacity(0.2))
+                                        .cornerRadius(5)
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                        .padding(.bottom, 5) // Add padding below tags
+                    }
+                    // --- End Display Labels --- 
+                    
                     // Body Section
                     VStack(alignment: .leading) {
                         if isLoadingBody {
@@ -203,6 +224,14 @@ struct EmailDetailView: View {
              .fill(neumorphicBackgroundColor)
              .shadow(color: darkDropShadowColor, radius: darkDropShadowBlur / 2, x: darkDropShadowX / 2, y: darkDropShadowY / 2)
              .shadow(color: lightDropShadowColor, radius: lightDropShadowBlur / 2, x: lightDropShadowX / 2, y: lightDropShadowY / 2)
+    }
+
+    // Helper to format label IDs for display
+    private func formatLabelId(_ labelId: String) -> String {
+        if labelId.starts(with: "CATEGORY_") {
+            return labelId.replacingOccurrences(of: "CATEGORY_", with: "").capitalized
+        }
+        return labelId.capitalized.replacingOccurrences(of: "_", with: " ")
     }
 }
 
@@ -369,64 +398,4 @@ struct ThreadMessageView: View {
     }
 }
 
-// MARK: - Preview
-struct EmailDetailView_Previews: PreviewProvider {
-    static var previews: some View {
-        // Create mock data first
-        let originalEmail = EmailDisplayData(
-            gmailMessageId: "originalMsgId",
-            threadId: "previewThread1",
-            messageIdHeader: "<original-preview@example.com>",
-            referencesHeader: nil,
-            sender: "Alice (Preview)",
-            senderEmail: "alice.preview@example.com",
-            recipient: "Bob (Preview)",
-            subject: "Project Update",
-            snippet: "Initial project update...",
-            body: "Hi Bob,\n\nHere's the initial update on the project.\n\nBest,\nAlice",
-            date: Calendar.current.date(byAdding: .day, value: -2, to: Date())!,
-            isRead: true,
-            previousMessages: nil
-        )
-        var reply1 = EmailDisplayData(
-            gmailMessageId: "reply1MsgId",
-            threadId: "previewThread1",
-            messageIdHeader: "<reply1-preview@example.com>",
-            referencesHeader: originalEmail.messageIdHeader,
-            sender: "Bob (Preview)",
-            senderEmail: "bob.preview@example.com",
-            recipient: "Alice (Preview)",
-            subject: "Re: Project Update",
-            snippet: "Thanks for the update, Alice...",
-            body: "Hi Alice,\n\nThanks for the update! A couple of questions...\n\nBest,\nBob",
-            date: Calendar.current.date(byAdding: .day, value: -1, to: Date())!,
-            isRead: true,
-            previousMessages: nil // Initialize as nil first
-        )
-        var reply2 = EmailDisplayData(
-            gmailMessageId: "reply2MsgId",
-            threadId: "previewThread1",
-            messageIdHeader: "<reply2-preview@example.com>",
-            referencesHeader: "\(originalEmail.messageIdHeader ?? "") \(reply1.messageIdHeader ?? "")",
-            sender: "Alice (Preview)",
-            senderEmail: "alice.preview@example.com",
-            recipient: "Bob (Preview)",
-            subject: "Re: Project Update",
-            snippet: "Here's some clarification...",
-            body: "Hi Bob,\n\nHere are answers to your questions...\n\nBest,\nAlice",
-            date: Date(),
-            isRead: false,
-            previousMessages: nil // Initialize as nil first
-        )
-        
-        // --- Perform setup outside the ViewBuilder return --- 
-        reply1.previousMessages = [originalEmail]
-        reply2.previousMessages = [reply1]
-        // --- End Setup ---
-
-        // Now return the actual view
-        return NavigationView {
-            EmailDetailView(email: reply2)
-        }
-    }
-} 
+// struct EmailDetailView_Previews: PreviewProvider { ... } // Remove this entire block 
