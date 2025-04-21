@@ -598,6 +598,48 @@ class GmailAPIService {
             }
         }
     }
+
+    // MARK: - Modify Message Labels
+
+    func modifyMessageLabels(for account: EmailAccount, messageId: String, addLabelIds: [String], removeLabelIds: [String], completion: @escaping (Result<GTLRGmail_Message, Error>) -> Void) {
+        print("Attempting to modify labels for message ID: \(messageId). Add: \(addLabelIds), Remove: \(removeLabelIds)")
+        
+        getAuthorizer(for: account.emailAddress) { [weak self] result in
+            guard let self = self else { return }
+            
+            switch result {
+            case .success(let authorizer):
+                self.service.authorizer = authorizer
+                
+                let modifyRequest = GTLRGmail_ModifyMessageRequest()
+                modifyRequest.addLabelIds = addLabelIds
+                modifyRequest.removeLabelIds = removeLabelIds
+                
+                let query = GTLRGmailQuery_UsersMessagesModify.query(withObject: modifyRequest, userId: "me", identifier: messageId)
+                
+                self.service.executeQuery(query) { (ticket, response, error) in
+                    if let error = error {
+                        print("Error modifying labels for message \(messageId): \(error.localizedDescription)")
+                        completion(.failure(error))
+                        return
+                    }
+                    
+                    guard let message = response as? GTLRGmail_Message else {
+                        print("Error: Could not parse modify message response for \(messageId).")
+                        completion(.failure(NSError(domain: "GmailAPIService", code: -8, userInfo: [NSLocalizedDescriptionKey: "Invalid modify message response"])))
+                        return
+                    }
+                    
+                    print("Successfully modified labels for message ID: \(messageId)")
+                    completion(.success(message))
+                }
+                
+            case .failure(let error):
+                print("Failed to get authorizer for modifying labels: \(error.localizedDescription)")
+                completion(.failure(error))
+            }
+        }
+    }
 }
 
 // Helper extension for Base64 URL Decoding (common need with Gmail API)

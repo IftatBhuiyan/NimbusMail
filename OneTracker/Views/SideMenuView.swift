@@ -25,9 +25,6 @@ struct SideMenuView: View {
     // State for Settings Sheet
     @State private var showingSettingsSheet = false 
     
-    // Use state for expansion, but data comes from viewModel
-    @State private var expandedAccounts: Set<UUID> = []
-    
     // Neumorphic text color
     private let neumorphicTextColor = Color(hex: "0D2750").opacity(0.8)
 
@@ -70,11 +67,13 @@ struct SideMenuView: View {
                     ForEach(viewModel.addedAccounts) { account in 
                         DisclosureGroup(
                             isExpanded: Binding(
-                                get: { expandedAccounts.contains(account.id) },
+                                // Read from ViewModel's state
+                                get: { viewModel.expandedAccountIDs.contains(account.id) }, 
+                                // Write to ViewModel's state
                                 set: { isExpanding in
                                     withAnimation(.easeInOut(duration: 0.2)) {
-                                        if isExpanding { expandedAccounts.insert(account.id) } 
-                                        else { expandedAccounts.remove(account.id) }
+                                        if isExpanding { viewModel.expandedAccountIDs.insert(account.id) } 
+                                        else { viewModel.expandedAccountIDs.remove(account.id) }
                                     }
                                 }
                             ),
@@ -132,7 +131,11 @@ struct SideMenuView: View {
                                             Button {
                                                 viewModel.selectedAccountFilter = account.emailAddress // Set account context
                                                 viewModel.selectedLabelFilter = label.identifier
-                                                withAnimation { isShowing = false } 
+                                                // Trigger fetch for the new filter
+                                                Task { 
+                                                    await viewModel.fetchMessagesForCurrentFilter()
+                                                }
+                                                withAnimation { isShowing = false } // Dismiss menu
                                                 print("Tapped label: \(label.name ?? "N/A") (ID: \(label.identifier ?? "N/A"))")
                                             } label: {
                                                 // Simple Label display (can customize with icons)

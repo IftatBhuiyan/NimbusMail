@@ -27,14 +27,14 @@ struct EmailDisplayData: Identifiable, Hashable {
     let accountEmail: String // Add this line to store the account email
     var labelIds: [String]? // Add this line to store label IDs
     
-    // Custom hash function if needed, especially if previousMessages is added
+    // Update hash function to include only stable id (remove isRead to keep identity constant)
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
     
-    // Custom equality check
+    // Equality check now compares id and isRead so UI updates when read status changes
     static func == (lhs: EmailDisplayData, rhs: EmailDisplayData) -> Bool {
-        lhs.id == rhs.id
+        lhs.id == rhs.id && lhs.isRead == rhs.isRead
     }
 }
 
@@ -49,7 +49,6 @@ struct ContentView: View {
     @State private var showingAddAccountSheet = false // State for Add Account sheet
     @FocusState private var isSearchFieldFocused: Bool // Add FocusState for search field
     @State private var composeMode: ComposeMode? = nil // State to trigger compose sheet
-    @State private var displayedEmails: [EmailDisplayData] = [] // State for debounced results
     @State private var searchTask: Task<Void, Never>? = nil // Task for debouncing
 
     // Remove local mock emails - use viewModel.inboxEmails instead
@@ -97,6 +96,27 @@ struct ContentView: View {
         
         // Text not found in this email or its history
                      return false
+    }
+
+    // Computed property for the header title
+    private var currentViewTitle: String {
+        // Default to Inbox
+        var title = "Inbox"
+
+        // Check if a specific label (other than INBOX) is selected
+        if let labelId = viewModel.selectedLabelFilter, labelId.uppercased() != "INBOX" {
+            // Try to find the label name from the ViewModel
+            if let accountEmail = viewModel.selectedAccountFilter,
+               let labels = viewModel.labelsByAccount[accountEmail],
+               let label = labels.first(where: { $0.identifier == labelId }) {
+                title = label.name?.capitalized ?? labelId.capitalized // Use name, fallback to ID
+            } else {
+                // Fallback if label data isn't available (should ideally not happen)
+                title = labelId.capitalized
+            }
+        }
+        // If selectedLabelFilter is nil or INBOX, title remains "Inbox"
+        return title
     }
 
     var body: some View {
@@ -150,7 +170,7 @@ struct ContentView: View {
                                 .transition(.move(edge: .leading).combined(with: .opacity)) // Adjust transition
                             } else {
                                 // Inbox Title (Only shown when search is NOT active)
-                                Text("Inbox")
+                                Text(currentViewTitle)
                                     .font(.largeTitle)
                                     .fontWeight(.bold)
                                     .foregroundColor(Color(hex: "0D2750").opacity(0.8))
@@ -189,22 +209,22 @@ struct ContentView: View {
 
                         ScrollView {
                             // Show progress indicator when fetching
-                            if viewModel.isFetchingEmails && displayedEmails.isEmpty { // Show initial fetch progress
+                            if viewModel.isFetchingEmails && filteredEmails.isEmpty { 
                                 ProgressView()
                                     .padding()
-                            } else if displayedEmails.isEmpty && !viewModel.isFetchingEmails { // Check displayedEmails
+                            } else if filteredEmails.isEmpty && !viewModel.isFetchingEmails { // Check filteredEmails
                                 // Show empty state message (adjust if needed based on search)
                                 Text(searchText.isEmpty ? "Inbox is empty" : "No results found")
                                     .foregroundColor(.secondary)
                                     .padding()
                             } else {
                                 LazyVStack(spacing: 15) {
-                                    // Iterate over displayedEmails (state variable)
-                                    ForEach(displayedEmails) { email in 
+                                    // Iterate directly over filteredEmails, using \_.id for ID to keep identity stable
+                                    ForEach(filteredEmails, id: \.id) { email in 
                                         NavigationLink(destination: EmailDetailView(email: email)) {
                                             EmailRowView(email: email)
                                                 .background(neumorphicBackgroundStyle())
-                                                .onAppear { // Trigger pagination check
+                                                .onAppear { // Trigger pagination check using the item from filteredEmails
                                                     viewModel.fetchMoreEmailsIfNeeded(currentItem: email)
                                                 }
                                         }
@@ -262,58 +282,27 @@ struct ContentView: View {
                 }
             }
         }
-        .onAppear { // Fetch emails when the view appears
-            // Initial load or if coming back to the view
-            updateDisplayedEmails(searchText: searchText)
-        }
-        // --- Add onChange for debouncing --- 
+        // --- Modify onChange for debouncing searchText --- 
         .onChange(of: searchText) { oldValue, newValue in
-            // Cancel the previous task if it exists
+            // Debouncing logic remains largely the same, but we don't update 
+            // displayedEmails directly. The filtering will happen automatically 
+            // when filteredEmails is accessed by the ForEach.
+            // We just need to ensure the view re-evaluates after the debounce.
             cancelSearchTask()
-            
-            // Start a new task to filter after a delay
             searchTask = Task {
-                // Capture viewModel emails *before* background dispatch
-                let emailsToFilter = viewModel.inboxEmails
                 do {
-                    // Wait for 300 milliseconds
                     try await Task.sleep(nanoseconds: 300_000_000)
-                    
-                    // Explicitly perform filtering on a background thread
-                    DispatchQueue.global(qos: .userInitiated).async { 
-                        // Perform filtering in the background using the captured list
-                        let filteredResults: [EmailDisplayData]
-                        if newValue.isEmpty {
-                            filteredResults = emailsToFilter // Use captured list
-                        } else {
-                            filteredResults = emailsToFilter.filter { email in // Use captured list
-                                emailContainsText(email, newValue)
-                            }
-                        }
-                        
-                        // Dispatch back to the main thread to update the UI state
-                        DispatchQueue.main.async {
-                            // Check if task was cancelled *before* updating UI
-                            guard !Task.isCancelled else { return }
-                            displayedEmails = filteredResults
-                        }
-                    }
-                    
+                    // No explicit update needed here, filteredEmails will use latest searchText
+                    // The view update happens naturally when the state changes implicitly.
+                     print("Debounce finished for search: \(newValue)")
                 } catch {
-                    // Handle cancellation (Task.sleep throws CancellationError)
                     if !(error is CancellationError) {
                         print("An unexpected error occurred in search task: \(error)")
                     } else {
-                        print("Search task cancelled.") // Keep this log for cancellations
+                        print("Search task cancelled.")
                     }
                 }
             }
-        }
-        // --- Update displayed emails when source changes --- 
-        .onChange(of: viewModel.inboxEmails) {
-            // Update displayed emails if the source data changes (e.g., after fetch/pagination)
-            // Keep current search text filtering applied
-            updateDisplayedEmails(searchText: searchText)
         }
         // Add the sheet modifier for the Add Account view
         .sheet(isPresented: $showingAddAccountSheet) {
@@ -330,22 +319,10 @@ struct ContentView: View {
         .environmentObject(viewModel)
     }
     
-    // --- Helper Functions --- 
-    private func updateDisplayedEmails(searchText: String) {
-        if searchText.isEmpty {
-            displayedEmails = viewModel.inboxEmails
-        } else {
-            displayedEmails = viewModel.inboxEmails.filter { email in
-                emailContainsText(email, searchText)
-            }
-        }
-    }
-    
     private func cancelSearchTask() {
         searchTask?.cancel()
         searchTask = nil
     }
-    // --- End Helper Functions ---
     
     private func neumorphicBackgroundStyle() -> some View {
         RoundedRectangle(cornerRadius: 15)
@@ -358,6 +335,11 @@ struct ContentView: View {
 // MARK: - Email Row View
 struct EmailRowView: View {
     let email: EmailDisplayData
+
+    // Computed property to get the decoded snippet
+    private var decodedSnippet: String {
+        return decodeHTMLEntities(email.snippet)
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 15) {
@@ -382,7 +364,7 @@ struct EmailRowView: View {
                     .fontWeight(email.isRead ? .regular : .semibold)
                     .foregroundColor(email.isRead ? .secondary : Color(hex: "0D2750").opacity(0.8))
                     .lineLimit(1)
-                Text(email.snippet)
+                Text(decodedSnippet)
                     .font(.caption)
                     .foregroundColor(.gray)
                     .lineLimit(2)
@@ -391,6 +373,19 @@ struct EmailRowView: View {
         .padding()
     }
     
+    // --- Add Helper Function ---
+    private func decodeHTMLEntities(_ string: String) -> String {
+        return string
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'") // Decode apostrophe
+            .replacingOccurrences(of: "&nbsp;", with: " ") // Decode non-breaking space
+            // Add more replacements if other common entities appear
+    }
+    // --- End Helper Function ---
+
     private func formatDate(_ date: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(date) {

@@ -11,6 +11,8 @@ struct EmailDetailView: View {
     @State private var isLoadingBody: Bool = false
     @State private var bodyErrorMessage: String?
     @State private var webViewHeight: CGFloat = .zero // State for dynamic height
+    @State private var bodyHTML: String? = nil
+    @State private var quoteHTML: String? = nil // Store quote separately if needed later
 
     var body: some View {
         ZStack(alignment: .bottom) { // Align ZStack content to the bottom
@@ -179,9 +181,15 @@ struct EmailDetailView: View {
 //                }
 //            }
 //        }
-        // Add task to fetch body on appear
+        // Add task to fetch body and mark as read on appear
         .task {
-            await fetchBody()
+            // Call both async functions concurrently if desired,
+            // or sequentially if marking read should happen first/after body loads.
+            // For now, let's run them concurrently.
+            async let fetchBodyTask: Void = fetchBody()
+            async let markReadTask: Void = viewModel.markAsRead(email: email)
+            
+            _ = await [fetchBodyTask, markReadTask] // Wait for both to complete
         }
     }
     
@@ -395,6 +403,40 @@ struct ThreadMessageView: View {
              .fill(Color(hex: "F0F0F3")) // Use actual color value
              .shadow(color: Color.black.opacity(0.2), radius: 5, x: 5, y: 5)
              .shadow(color: Color.white.opacity(0.7), radius: 5, x: -5, y: -5)
+    }
+}
+
+// MARK: - View for Previous Messages in Thread
+struct PreviousMessageView: View {
+    let email: EmailDisplayData
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(email.sender)
+                    .font(.footnote)
+                    .fontWeight(.semibold)
+                    .foregroundColor(Color(hex: "0D2750").opacity(0.8))
+                Spacer()
+                Text(email.date.formatted(date: .numeric, time: .shortened))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            Text(email.snippet) // Display the snippet for content
+                .font(.footnote)
+                .foregroundColor(.gray)
+                .lineLimit(3) // Limit snippet lines if needed
+        }
+        .padding()
+        .background(neumorphicBackgroundStyle()) // Apply consistent styling
+    }
+    
+    // Re-use the neumorphic style helper
+    private func neumorphicBackgroundStyle() -> some View {
+        RoundedRectangle(cornerRadius: 10) // Slightly smaller radius?
+            .fill(neumorphicBackgroundColor)
+            .shadow(color: darkDropShadowColor.opacity(0.8), radius: (darkDropShadowBlur / 2) * 0.8, x: (darkDropShadowX / 2) * 0.8, y: (darkDropShadowY / 2) * 0.8) // Slightly subtle shadow
+            .shadow(color: lightDropShadowColor.opacity(0.8), radius: (lightDropShadowBlur / 2) * 0.8, x: (lightDropShadowX / 2) * 0.8, y: (lightDropShadowY / 2) * 0.8)
     }
 }
 

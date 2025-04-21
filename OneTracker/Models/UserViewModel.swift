@@ -25,6 +25,9 @@ class UserViewModel: ObservableObject {
     @Published var nextPageTokens: [String: String?] = [:] // Store next page token per account filter key
     @Published var isFetchingMoreEmails: Bool = false // Loading state for pagination
     
+    // --- State for Side Menu --- 
+    @Published var expandedAccountIDs: Set<UUID> = [] // Persists expanded state
+    
     // Computed property for suggested contacts
     var suggestedContacts: [String] {
         var contacts = Set<String>()
@@ -146,10 +149,9 @@ class UserViewModel: ObservableObject {
         if !addedAccounts.contains(where: { $0.emailAddress == email }) {
             let newAccount = EmailAccount(emailAddress: email, provider: provider)
             addedAccounts.append(newAccount)
-            // TODO: Persist the addedAccounts list (e.g., UserDefaults with email addresses, Keychain for secure mapping)
-            // TODO: Optionally trigger initial folder/email fetch for the new account
+            saveAccounts() // Save after adding
             print("Account added: \(email)")
-            // Fetch emails for the newly added account
+            // Fetch emails and labels for the newly added account
             fetchInboxMessages(for: newAccount)
             fetchLabels(for: newAccount)
         } else {
@@ -169,20 +171,76 @@ class UserViewModel: ObservableObject {
         addedAccounts.removeAll { $0.id == account.id }
         // TODO: Update persisted account list
         print("Account removed: \(account.emailAddress)")
+        saveAccounts() // Save after removing
     }
     
     // Function to load accounts (placeholder)
     // TODO: Implement loading from persisted storage (e.g., fetch list from UserDefaults/Keychain)
     private func loadAccounts() {
-        // Example: Load a list of email addresses from UserDefaults
-        // For each email, try loading its token from Keychain
-        // If token exists, create an EmailAccount and add to addedAccounts
-        print("Placeholder: loadAccounts() called. Implement persistence.")
-        // self.addedAccounts = previouslySavedAccounts
-        // TODO: After loading accounts, fetch labels for each
-        // for account in self.addedAccounts {
-        //     fetchLabels(for: account)
-        // }
+        let key = userDefaultsKeyForAccounts
+        guard key != "addedAccounts_loggedOut" else {
+            print("Skipping loadAccounts: User is logged out.")
+            self.addedAccounts = [] // Ensure accounts are cleared if logged out
+            return
+        }
+
+        print("Attempting to load accounts from UserDefaults for key: \(key)")
+        guard let data = UserDefaults.standard.data(forKey: key) else {
+            print("No saved accounts data found in UserDefaults for key \(key).")
+            self.addedAccounts = [] // Start with empty list if no data
+            return
+        }
+        
+        do {
+            let decoder = JSONDecoder()
+            let loadedAccounts = try decoder.decode([EmailAccount].self, from: data)
+            self.addedAccounts = loadedAccounts
+            print("Successfully loaded \(loadedAccounts.count) accounts from UserDefaults.")
+            
+            // After loading, fetch labels for each account
+            for account in loadedAccounts {
+                fetchLabels(for: account)
+                // Note: fetchInboxMessages(for:) is likely called by fetchAllInboxMessages in init,
+                // so we might not need to call it explicitly here.
+            }
+        } catch {
+            print("Error loading accounts from UserDefaults: \(error.localizedDescription). Resetting to empty.")
+            self.addedAccounts = [] // Reset if decoding fails
+        }
+    }
+    
+    // MARK: - Account Persistence
+    
+    private var userDefaultsKeyForAccounts: String {
+        // Create a unique key per logged-in Firebase user
+        // Fallback to a generic key if no user is logged in (though less ideal)
+        if let firebaseUserId = Auth.auth().currentUser?.uid {
+            return "addedAccounts_\(firebaseUserId)"
+        } else {
+            // Handle the case where Firebase user is not available (e.g., during sign-out)
+            // Maybe return a key that won't be saved, or a default? 
+            // For now, let's return a key that indicates no user, preventing accidental saves.
+            return "addedAccounts_loggedOut"
+        }
+    }
+
+    private func saveAccounts() {
+        // Ensure we have a valid key (i.e., user is logged in)
+        let key = userDefaultsKeyForAccounts
+        guard key != "addedAccounts_loggedOut" else {
+            print("Skipping saveAccounts: User is logged out.")
+            return
+        }
+        
+        do {
+            let encoder = JSONEncoder()
+            let data = try encoder.encode(addedAccounts)
+            UserDefaults.standard.set(data, forKey: key)
+            print("Successfully saved \(addedAccounts.count) accounts to UserDefaults for key \(key).")
+        } catch {
+            print("Error saving accounts to UserDefaults: \(error.localizedDescription)")
+            // Optionally update errorMessage
+        }
     }
     
     // MARK: - Label Fetching
@@ -963,5 +1021,142 @@ class UserViewModel: ObservableObject {
         isLoading = false
         print("ViewModel: Email send reported as successful.")
         // Optionally: Refresh inbox? Trigger confirmation message?
+    }
+
+    // MARK: - Email Actions (Mark Read/Unread, Delete, etc.)
+
+    func markAsRead(email: EmailDisplayData) async {
+        // 1. Check if already marked as read locally
+        guard email.labelIds?.contains("UNREAD") == true else {
+            print("Email \(email.id) is already marked as read locally.")
+            return
+        }
+
+        // 2. Get the service for the correct account
+        guard let account = addedAccounts.first(where: { $0.emailAddress == email.accountEmail }) else {
+            print("Error: Could not find account (\(email.accountEmail)) for email \(email.id)") 
+            return
+        }
+        
+        print("Attempting to mark email \(email.id) as read for account \(account.emailAddress)")
+        
+        // 3. Call the NEW Gmail service function to modify labels using async/await
+        do {
+            // Convert the completion handler based function to async using withCheckedThrowingContinuation
+            let _: GTLRGmail_Message = try await withCheckedThrowingContinuation { continuation in
+                GmailAPIService.shared.modifyMessageLabels(
+                    for: account, 
+                    messageId: email.gmailMessageId, // Use the actual Gmail message ID
+                    addLabelIds: [], // No labels to add
+                    removeLabelIds: ["UNREAD"] // Label ID to remove
+                ) { result in
+                    switch result {
+                    case .success(let message):
+                        continuation.resume(returning: message)
+                    case .failure(let error):
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+            
+            // 4. Update local state on success
+            print("Successfully marked email \(email.id) as read via API.")
+            let accountEmail = email.accountEmail 
+            // Ensure the array exists and make a mutable copy
+            if var emailsForAccount = emailsByAccount[accountEmail],
+               let index = emailsForAccount.firstIndex(where: { $0.id == email.id }) {
+                
+                // Modify the properties directly on the struct within the copied array
+                emailsForAccount[index].labelIds?.removeAll { $0 == "UNREAD" }
+                emailsForAccount[index].isRead = true // Explicitly set isRead to true
+                
+                // Reassign the entire modified array back to the dictionary
+                // This ensures SwiftUI detects the change while preserving item identity.
+                emailsByAccount[accountEmail] = emailsForAccount
+                print("Updated local email state for \(email.id) (isRead=true). Modified instance in copied array for account \(accountEmail).")
+            } else {
+                print("Warning: Could not find email \(email.id) in local cache (\(accountEmail)) to update state after marking read.") 
+            }
+            
+        } catch { // Catch errors from the async call
+            print("Error marking email \(email.id) as read: \(error.localizedDescription)")
+            errorMessage = "Failed to mark email as read."
+        }
+    }
+
+    // TODO: Add functions for markAsUnread, deleteEmail, archiveEmail, etc.
+
+    // MARK: - Filtered Fetching
+
+    func fetchMessagesForCurrentFilter() async {
+        guard let accountEmail = selectedAccountFilter else {
+            print("Filter Fetch: Cannot fetch, no account selected.")
+            // If no account is selected, it implies "All Inboxes". 
+            // We might need to refresh all inboxes here, similar to fetchAllInboxMessages.
+            // For now, we only handle fetches when a specific account is selected.
+            // Consider calling fetchAllInboxMessages() if appropriate for 'All Inboxes'.
+            return 
+        }
+        
+        guard let account = addedAccounts.first(where: { $0.emailAddress == accountEmail }) else {
+            print("Filter Fetch: Account object not found for \\(accountEmail)")
+            return
+        }
+
+        // Determine label IDs to fetch based on selectedLabelFilter
+        var labelIdsToFetch: [String]? = nil
+        var fetchDescription = "" // For logging
+        if let labelId = selectedLabelFilter {
+            labelIdsToFetch = [labelId]
+            fetchDescription = "label '\\(labelId)'"
+        } else {
+            // If no specific label is selected for the account, what should we fetch?
+            // Option 1: Default to INBOX
+            // labelIdsToFetch = ["INBOX"] 
+            // fetchDescription = "default INBOX"
+            // Option 2: Fetch "All Mail" (excluding spam/trash) - Requires different query?
+            // For now, let's assume if selectedLabelFilter is nil for a specific account,
+            // it means "All Mail" for that account. The API call might need adjustment.
+            // Let's default to fetching INBOX if no label is selected, for simplicity now.
+             labelIdsToFetch = ["INBOX"] // Defaulting to INBOX for now if filter is nil
+             fetchDescription = "default INBOX (nil filter)"
+            print("Filter Fetch: No specific label selected for \\(accountEmail). Defaulting to fetch INBOX.")
+        }
+        
+        print("Filter Fetch: Starting fetch for account \\(accountEmail), \(fetchDescription)")
+        
+        await MainActor.run { // Ensure UI updates happen on main thread
+             isFetchingEmails = true
+             errorMessage = nil
+             // Clear previous emails for *this account* before fetching new filter results
+             // This prevents showing stale data while fetching.
+             emailsByAccount[accountEmail] = [] 
+             nextPageTokens[accountEmail] = nil // Reset pagination for the new filter
+        }
+
+        // Fetch threads for the specific account and label
+        let result = await fetchThreadsForAccountAsync(account: account, labelIds: labelIdsToFetch)
+        
+        // Update state on the main thread
+        await MainActor.run {
+            isFetchingEmails = false // Fetch complete
+            switch result {
+            case .success(let (threads, nextPageToken)):
+                print("Filter Fetch: Successfully fetched \\(threads.count) threads for \\(accountEmail), \(fetchDescription). Mapping...")
+                let mappedEmails = self.mapAndStructureThreads(threads, for: accountEmail)
+                // Replace the emails for this account with the newly fetched ones
+                emailsByAccount[accountEmail] = mappedEmails
+                nextPageTokens[accountEmail] = nextPageToken // Store new pagination token
+                // Fix interpolation for optional token
+                print("Filter Fetch: Updated cache for \\(accountEmail). Total: \\(mappedEmails.count). Next Token: \(String(describing: nextPageToken))")
+
+            case .failure(let error):
+                print("Filter Fetch: Failed fetch for \\(accountEmail), \(fetchDescription): \(error.localizedDescription)")
+                errorMessage = "Failed to load emails for selected filter."
+                // Keep the account's email list empty on failure? Or revert? Empty is simpler.
+                emailsByAccount[accountEmail] = [] 
+                nextPageTokens[accountEmail] = nil
+            }
+        }
     }
 } 
