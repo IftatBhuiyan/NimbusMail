@@ -267,36 +267,40 @@ struct ContentView: View {
             updateDisplayedEmails(searchText: searchText)
         }
         // --- Add onChange for debouncing --- 
-        .onChange(of: searchText) { newValue in
+        .onChange(of: searchText) { oldValue, newValue in
             // Cancel the previous task if it exists
             cancelSearchTask()
             
             // Start a new task to filter after a delay
             searchTask = Task {
-                var finalResults: [EmailDisplayData] = []
+                // Capture viewModel emails *before* background dispatch
+                let emailsToFilter = viewModel.inboxEmails
                 do {
                     // Wait for 300 milliseconds
                     try await Task.sleep(nanoseconds: 300_000_000)
                     
-                    // --- Perform filtering in the background --- 
-                    if newValue.isEmpty {
-                        finalResults = viewModel.inboxEmails
-                    } else {
-                        finalResults = viewModel.inboxEmails.filter { email in
-                            emailContainsText(email, newValue)
+                    // Explicitly perform filtering on a background thread
+                    DispatchQueue.global(qos: .userInitiated).async { 
+                        // Perform filtering in the background using the captured list
+                        let filteredResults: [EmailDisplayData]
+                        if newValue.isEmpty {
+                            filteredResults = emailsToFilter // Use captured list
+                        } else {
+                            filteredResults = emailsToFilter.filter { email in // Use captured list
+                                emailContainsText(email, newValue)
+                            }
+                        }
+                        
+                        // Dispatch back to the main thread to update the UI state
+                        DispatchQueue.main.async {
+                            // Check if task was cancelled *before* updating UI
+                            guard !Task.isCancelled else { return }
+                            displayedEmails = filteredResults
                         }
                     }
-                    // --- End filtering ---
                     
-                    // Update the state on the main actor ONLY with the final result
-                    await MainActor.run { 
-                        // Check if task was cancelled before updating state
-                        guard !Task.isCancelled else { return }
-                        displayedEmails = finalResults
-                    }
                 } catch {
                     // Handle cancellation (Task.sleep throws CancellationError)
-                    // Check if the error is specifically CancellationError
                     if !(error is CancellationError) {
                         print("An unexpected error occurred in search task: \(error)")
                     } else {
@@ -306,7 +310,7 @@ struct ContentView: View {
             }
         }
         // --- Update displayed emails when source changes --- 
-        .onChange(of: viewModel.inboxEmails) { _ in
+        .onChange(of: viewModel.inboxEmails) {
             // Update displayed emails if the source data changes (e.g., after fetch/pagination)
             // Keep current search text filtering applied
             updateDisplayedEmails(searchText: searchText)

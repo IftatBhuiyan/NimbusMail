@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseAuth
 
 // REMOVE Mock Data Structures - They are now in EmailAccountModels.swift
 /*
@@ -20,6 +21,9 @@ struct SideMenuView: View {
     @EnvironmentObject var viewModel: UserViewModel // Keep for Logout action
     @Binding var isShowing: Bool // Binding to control the side menu visibility
     @Binding var showingAddAccountSheet: Bool // Binding to trigger add account sheet
+    
+    // State for Settings Sheet
+    @State private var showingSettingsSheet = false 
     
     // Use state for expansion, but data comes from viewModel
     @State private var expandedAccounts: Set<UUID> = []
@@ -214,7 +218,7 @@ struct SideMenuView: View {
             VStack(alignment: .leading, spacing: 0) { 
                  Divider().padding(.bottom, 10) // Reduced padding
                  Button {
-                    print("Go to Settings")
+                    showingSettingsSheet = true // Set state to show sheet
                  } label: {
                     Label("Settings", systemImage: "gear")
                  }
@@ -230,6 +234,10 @@ struct SideMenuView: View {
             }
             .padding(.horizontal) 
             .padding(.bottom, 20) // Reduced bottom padding
+        }
+        // Add the sheet modifier to the outer ScrollView or VStack
+        .sheet(isPresented: $showingSettingsSheet) {
+            SettingsView() // Present the SettingsView
         }
     }
     

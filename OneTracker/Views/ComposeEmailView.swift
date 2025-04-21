@@ -135,6 +135,9 @@ struct ComposeEmailView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var userViewModel: UserViewModel
     
+    // Read the setting from AppStorage
+    @AppStorage("includeQuotedReplies") private var includeQuotedReplies: Bool = true
+
     // Add FocusState to track field focus
     @FocusState private var focusedField: Field?
     
@@ -421,7 +424,7 @@ struct ComposeEmailView: View {
     private func setupInitialContent() {
         ccRecipient = ""
         bccRecipient = ""
-        quotedText = nil
+        quotedText = nil // Reset quote initially
         isQuotedTextExpanded = false
         
         switch mode {
@@ -431,9 +434,16 @@ struct ComposeEmailView: View {
         case .reply(let originalEmail, let originalBody):
             recipient = originalEmail.senderEmail ?? originalEmail.sender 
             subject = "Re: \(originalEmail.subject)"
-            let bodyToQuote = originalBody ?? originalEmail.body
-            quotedText = "---\nOn \(originalEmail.date.formatted(date: .abbreviated, time: .shortened)), \(originalEmail.sender) wrote:\n\n\(bodyToQuote)"
-            bodyText = "\n\n"
+            bodyText = "\n\n" // Start with empty lines for the reply
+            
+            // Conditionally include quoted text based on setting
+            if includeQuotedReplies {
+                let bodyToQuote = originalBody ?? originalEmail.body
+                quotedText = "---\nOn \(originalEmail.date.formatted(date: .abbreviated, time: .shortened)), \(originalEmail.sender) wrote:\n\n\(bodyToQuote)"
+            } else {
+                quotedText = nil // Ensure it's nil if setting is off
+            }
+
         case .forward(let originalEmail, let originalBody):
             subject = "Fwd: \(originalEmail.subject)" 
             let bodyToQuote = originalBody ?? originalEmail.body
