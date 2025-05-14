@@ -1,8 +1,7 @@
 import Foundation
 import Combine
-import FirebaseAuth
+import Supabase
 import AuthenticationServices
-import Firebase
 import SwiftUI
 import GoogleSignIn
 import GoogleAPIClientForREST_Gmail
@@ -62,8 +61,8 @@ class UserViewModel: ObservableObject {
         return sortedContacts
     }
     
-    // Auth service (keep private)
-    private var authService: AuthenticationService?
+    // Auth service (make internal - remove private)
+    /* private */ var authService: AuthenticationService?
     private var cancellables = Set<AnyCancellable>()
     
     // Computed property to flatten emails for display (can be filtered later)
@@ -101,30 +100,45 @@ class UserViewModel: ObservableObject {
         
         // Subscribe to authentication state changes
         authService?.$isUserAuthenticated
+            .receive(on: DispatchQueue.main) // Ensure main thread
             .assign(to: \.isAuthenticated, on: self)
             .store(in: &cancellables)
         
-        // Subscribe to current user changes
+        // Subscribe to current user changes (now Supabase User)
         authService?.$currentUser
-            .sink { [weak self] user in
-                self?.userEmail = user?.email
-                self?.userName = user?.displayName
+            .receive(on: DispatchQueue.main) // Ensure main thread
+            .sink { [weak self] supabaseUser in
+                guard let self = self else { return }
+                
+                self.userEmail = supabaseUser?.email
+                self.userName = supabaseUser?.userMetadata["full_name"] as? String ?? supabaseUser?.userMetadata["name"] as? String
+                print("ViewModel Updated: Email=\(self.userEmail ?? "nil"), Name=\(self.userName ?? "nil")")
+                
+                if supabaseUser != nil {
+                    print("User logged in, loading accounts...")
+                    Task {
+                        await self.loadAccounts()
+                        // Don't necessarily fetch all emails immediately after loading accounts from DB
+                        // Let user interaction or a background sync trigger this.
+                        // await self.fetchAllInboxMessages() 
+                    }
+                } else {
+                    print("User logged out, clearing accounts...")
+                    // No await needed here, already on main thread
+                    self.addedAccounts = []
+                    self.emailsByAccount = [:]
+                    self.labelsByAccount = [:]
+                    self.nextPageTokens = [:]
+                }
             }
             .store(in: &cancellables)
         
-        // Check current auth state (avoid direct call if possible, rely on publisher)
-        // If direct check is needed, ensure Firebase is configured or handle nil
-        if FirebaseApp.app() != nil { // Basic check if Firebase is configured
-             isAuthenticated = Auth.auth().currentUser != nil
-             userEmail = Auth.auth().currentUser?.email
-             userName = Auth.auth().currentUser?.displayName
-        } else {
-            print("Warning: Firebase not configured in UserViewModel init. State might be inaccurate.")
-            isAuthenticated = false // Default state if Firebase isn't ready
-        }
-        
-        loadAccounts() // Load accounts on init
-        fetchAllInboxMessages() // Fetch emails on init
+        // Remove direct Firebase check
+        // if FirebaseApp.app() != nil { ... }
+
+        // Initial load/fetch is now handled by the sink above when the first auth state is received
+        // loadAccounts() 
+        // fetchAllInboxMessages()
     }
     
     // Initializer for Previews & Testing
@@ -138,242 +152,392 @@ class UserViewModel: ObservableObject {
     
     // MARK: - Account Management
     
-    // Function to add a new account (placeholder for now)
-    // In reality, this would likely be called after successful OAuth AND Keychain save
     func addAccount(email: String, provider: String, refreshToken: String) {
-        // 1. Save refresh token using KeychainService (already done in AddAccountProviderView)
-        // let saveSuccessful = KeychainService.save(token: refreshToken, account: email)
-        // guard saveSuccessful else { /* handle error */ return }
+        // 1. Ensure user is authenticated
+        guard let userId = authService?.currentUser?.id else {
+            print("Error adding account: User not authenticated.")
+            self.errorMessage = "Authentication required to add accounts."
+            return
+        }
         
-        // 2. Check if account already exists
-        if !addedAccounts.contains(where: { $0.emailAddress == email }) {
-            let newAccount = EmailAccount(emailAddress: email, provider: provider)
-            addedAccounts.append(newAccount)
-            saveAccounts() // Save after adding
-            print("Account added: \(email)")
-            // Fetch emails and labels for the newly added account
-            fetchInboxMessages(for: newAccount)
-            fetchLabels(for: newAccount)
-        } else {
-            print("Account already exists: \(email)")
-            // Optionally update existing account info/tokens if needed
+        // 2. Prepare the account data for insertion
+        // Note: We don't need to check addedAccounts locally first, 
+        // the database primary key (user_id, email_address) will prevent duplicates.
+        let newAccount = EmailAccount(userId: userId, emailAddress: email, provider: provider)
+        // Optional: You could set accountName here if you fetched it during OAuth
+        // newAccount.accountName = fetchedName 
+
+        print("Attempting to add account \(email) to database for user \(userId).")
+        
+        Task {
+            do {
+                // 3. Insert into Supabase 'accounts' table
+                // We pass the whole 'newAccount' object because it's Codable
+                // and matches the table structure (thanks to CodingKeys)
+                _ = try await supabase
+                    .from("accounts")
+                    .insert(newAccount) // Pass the Codable struct
+                    .execute()
+                
+                print("Successfully inserted account \(email) into database.")
+                
+                // 4. Reload accounts from database to update local state
+                // Ensure loadAccounts is called on main actor if it updates @Published properties
+                await loadAccounts() // Assuming loadAccounts handles main actor update
+                
+                // 5. Fetch emails/labels for the new account (already done by loadAccounts now)
+                // if let newlyLoadedAccount = self.addedAccounts.first(where: { $0.emailAddress == email }) {
+                //    fetchInboxMessages(for: newlyLoadedAccount)
+                //    fetchLabels(for: newlyLoadedAccount)
+                // }
+                
+            } catch {
+                print("Error inserting account \(email) into database: \(error.localizedDescription)")
+                // Add await here
+                await MainActor.run {
+                     self.errorMessage = "Failed to save account: \(error.localizedDescription)"
+                 }
+            }
         }
     }
     
     func removeAccount(account: EmailAccount) {
-        // 1. Delete refresh token from Keychain
-        let deleteSuccessful = KeychainService.deleteToken(account: account.emailAddress)
-        if !deleteSuccessful {
-             print("Warning: Failed to delete token from keychain for \(account.emailAddress), but removing from list anyway.")
-        }
-        
-        // 2. Remove from the list
-        addedAccounts.removeAll { $0.id == account.id }
-        // TODO: Update persisted account list
-        print("Account removed: \(account.emailAddress)")
-        saveAccounts() // Save after removing
-    }
-    
-    // Function to load accounts (placeholder)
-    // TODO: Implement loading from persisted storage (e.g., fetch list from UserDefaults/Keychain)
-    private func loadAccounts() {
-        let key = userDefaultsKeyForAccounts
-        guard key != "addedAccounts_loggedOut" else {
-            print("Skipping loadAccounts: User is logged out.")
-            self.addedAccounts = [] // Ensure accounts are cleared if logged out
+        // 1. Ensure user is authenticated and we have the target account details
+        guard let userId = authService?.currentUser?.id else {
+            print("Error removing account: User not authenticated.")
+            self.errorMessage = "Authentication required to remove accounts."
             return
         }
+        let emailToDelete = account.emailAddress
+        print("Attempting to remove account \(emailToDelete) from database for user \(userId).")
 
-        print("Attempting to load accounts from UserDefaults for key: \(key)")
-        guard let data = UserDefaults.standard.data(forKey: key) else {
-            print("No saved accounts data found in UserDefaults for key \(key).")
-            self.addedAccounts = [] // Start with empty list if no data
-            return
-        }
-        
-        do {
-            let decoder = JSONDecoder()
-            let loadedAccounts = try decoder.decode([EmailAccount].self, from: data)
-            self.addedAccounts = loadedAccounts
-            print("Successfully loaded \(loadedAccounts.count) accounts from UserDefaults.")
-            
-            // After loading, fetch labels for each account
-            for account in loadedAccounts {
-                fetchLabels(for: account)
-                // Note: fetchInboxMessages(for:) is likely called by fetchAllInboxMessages in init,
-                // so we might not need to call it explicitly here.
+        Task {
+            do {
+                // 2. Delete refresh token from Keychain (keep this local operation)
+                let deleteSuccessful = KeychainService.deleteToken(account: emailToDelete)
+                if !deleteSuccessful {
+                    print("Warning: Failed to delete token from keychain for \(emailToDelete), but proceeding with DB delete.")
+                }
+                
+                // 3. Delete from Supabase 'accounts' table
+                _ = try await supabase
+                    .from("accounts")
+                    .delete()
+                    .match(["user_id": userId.uuidString, "email_address": emailToDelete]) // Match on composite key
+                    .execute()
+                
+                print("Successfully deleted account \(emailToDelete) from database.")
+                
+                // 4. Reload accounts from database to update local state
+                await loadAccounts()
+                
+            } catch {
+                print("Error deleting account \(emailToDelete) from database: \(error.localizedDescription)")
+                 // Add await here
+                 await MainActor.run {
+                    self.errorMessage = "Failed to remove account: \(error.localizedDescription)"
+                 }
             }
-        } catch {
-            print("Error loading accounts from UserDefaults: \(error.localizedDescription). Resetting to empty.")
-            self.addedAccounts = [] // Reset if decoding fails
         }
     }
     
-    // MARK: - Account Persistence
-    
-    private var userDefaultsKeyForAccounts: String {
-        // Create a unique key per logged-in Firebase user
-        // Fallback to a generic key if no user is logged in (though less ideal)
-        if let firebaseUserId = Auth.auth().currentUser?.uid {
-            return "addedAccounts_\(firebaseUserId)"
-        } else {
-            // Handle the case where Firebase user is not available (e.g., during sign-out)
-            // Maybe return a key that won't be saved, or a default? 
-            // For now, let's return a key that indicates no user, preventing accidental saves.
-            return "addedAccounts_loggedOut"
-        }
-    }
-
-    private func saveAccounts() {
-        // Ensure we have a valid key (i.e., user is logged in)
-        let key = userDefaultsKeyForAccounts
-        guard key != "addedAccounts_loggedOut" else {
-            print("Skipping saveAccounts: User is logged out.")
+    // Updated to load accounts from Supabase database and marked async
+    private func loadAccounts() async {
+        guard let userId = authService?.currentUser?.id else {
+            print("Skipping loadAccounts: User not authenticated.")
+            self.addedAccounts = [] 
+            self.labelsByAccount = [:] // Clear cache on logout
+            self.emailsByAccount = [:] // Clear cache on logout
             return
         }
         
+        print("Attempting to load accounts from database for user: \(userId)")
+        
         do {
-            let encoder = JSONEncoder()
-            let data = try encoder.encode(addedAccounts)
-            UserDefaults.standard.set(data, forKey: key)
-            print("Successfully saved \(addedAccounts.count) accounts to UserDefaults for key \(key).")
+            // 1. Fetch Accounts from DB
+            let loadedAccounts: [EmailAccount] = try await supabase
+                .from("accounts")
+                .select()
+                .eq("user_id", value: userId.uuidString)
+                .execute()
+                .value 
+
+            // 2. Update local accounts state (already on MainActor)
+            self.addedAccounts = loadedAccounts
+            print("Successfully loaded \(loadedAccounts.count) accounts from database.")
+            
+            // 3. Load cached Labels & Emails from DB *first*
+            if !loadedAccounts.isEmpty {
+                await loadLabelsFromDatabase(for: userId)
+                await loadEmailsFromDatabase(for: userId)
+            } else {
+                 // Ensure caches are clear if no accounts found in DB
+                 self.labelsByAccount = [:]
+                 self.emailsByAccount = [:]
+            }
+            
+            // 4. *Then*, trigger background API fetches for fresh data & sync
+            // These will update the UI state again and sync to DB
+            print("Triggering API fetches for labels and emails...")
+            for account in loadedAccounts {
+                // fetchLabels handles its own Task/async
+                self.fetchLabels(for: account)
+            }
+            // fetchAllInboxMessages handles its own Task/async
+            self.fetchAllInboxMessages() 
+            
         } catch {
-            print("Error saving accounts to UserDefaults: \(error.localizedDescription)")
-            // Optionally update errorMessage
+            print("Error loading accounts from database: \(error.localizedDescription)")
+            self.errorMessage = "Failed to load saved accounts: \(error.localizedDescription)"
+            self.addedAccounts = [] 
+            self.labelsByAccount = [:] // Clear cache on error
+            self.emailsByAccount = [:] // Clear cache on error
         }
     }
+    
+    // MARK: - Account Persistence (Remove UserDefaults logic)
+    
+    // Remove userDefaultsKeyForAccounts computed property
+    /*
+    private var userDefaultsKeyForAccounts: String {
+        // ... removed ...
+    }
+    */
+
+    // Remove saveAccounts function
+    /*
+    private func saveAccounts() {
+        // ... removed ...
+    }
+    */
     
     // MARK: - Label Fetching
 
     func fetchLabels(for account: EmailAccount) {
         let accountEmail = account.emailAddress
-        // Avoid redundant fetches if already loading or labels exist
-        guard isFetchingLabels[accountEmail] != true, labelsByAccount[accountEmail] == nil else {
-             print("Labels already fetched or currently fetching for \(accountEmail)")
+        guard let userId = authService?.currentUser?.id else {
+            print("Cannot fetch labels: User not authenticated.")
              return
         }
         
-        print("Fetching labels for \(accountEmail)")
-        isFetchingLabels[accountEmail] = true
+        // If we already have labels for this account, don't set loading state to avoid UI flickering
+        let hasCachedLabels = labelsByAccount[accountEmail]?.isEmpty == false
         
-        // Call the service
+        if !hasCachedLabels {
+            // Only show loading indicator if we don't have any cached labels
+            isFetchingLabels[accountEmail] = true
+        }
+        
+        print("Fetching labels for \(accountEmail) from Gmail API...")
+        
         GmailAPIService.shared.fetchLabels(for: account) { [weak self] result in
-            // Update state on main thread
             Task {
-                await MainActor.run {
+                // Use a single guard to unwrap self for the whole Task scope
                     guard let self = self else { return }
-                    self.isFetchingLabels[accountEmail] = false // Mark loading as complete
+                
+                // Update fetching state on MainActor
+                await MainActor.run { 
+                    self.isFetchingLabels[accountEmail] = false 
+                }
+                
                     switch result {
-                    case .success(let labels):
-                        self.labelsByAccount[accountEmail] = labels
-                        print("Successfully stored \(labels.count) labels for \(accountEmail).")
-                        // --- Add Logging --- 
-                        print("Fetched Label IDs/Names for \(accountEmail):")
-                        labels.forEach { print("  ID: \($0.identifier ?? "N/A"), Name: \($0.name ?? "N/A"), Type: \($0.type ?? "N/A")") }
-                        // --- End Logging ---
-                        // TODO: Potentially trigger UI update if SideMenuView depends on this directly
-                    case .failure(let error):
-                        // Handle error (e.g., update errorMessage)
-                        print("Failed to fetch labels for \(accountEmail): \(error.localizedDescription)")
+                case .success(let fetchedGtlrLabels):
+                    // If we have existing labels and the fetched ones are the same, don't update UI
+                    if let existingLabels = self.labelsByAccount[accountEmail], !existingLabels.isEmpty {
+                        // Only update if there's a meaningful difference to avoid UI flickering
+                        let existingIds = Set(existingLabels.compactMap { $0.identifier })
+                        let newIds = Set(fetchedGtlrLabels.compactMap { $0.identifier })
+                        
+                        if existingIds == newIds {
+                            print("Labels for \(accountEmail) unchanged, skipping UI update")
+                            // Still sync to database in background
+                            Task {
+                                await self.syncLabelsToDatabase(userId: userId, accountEmail: accountEmail, labels: fetchedGtlrLabels)
+                            }
+                            return
+                        }
+                    }
+                    
+                    // If we get here, we need to update the UI with new labels
+                    await MainActor.run { 
+                        self.labelsByAccount[accountEmail] = fetchedGtlrLabels
+                        print("Successfully fetched \(fetchedGtlrLabels.count) labels from Gmail API for \(accountEmail).")
+                    }
+                    
+                    // Sync to Supabase (can happen in background Task)
+                    await self.syncLabelsToDatabase(userId: userId, accountEmail: accountEmail, labels: fetchedGtlrLabels)
+                    
+                case .failure(let error):
+                    // Handle API fetch error on MainActor
+                     await MainActor.run {
+                        print("Failed to fetch labels from Gmail API for \(accountEmail): \(error.localizedDescription)")
                         self.errorMessage = "Failed to load folders for \(accountEmail)."
                     }
                 }
             }
         }
     }
+    
+    // Helper method to sync labels to database
+    private func syncLabelsToDatabase(userId: UUID, accountEmail: String, labels: [GTLRGmail_Label]) async {
+        do {
+            let supabaseLabels = labels.compactMap { gtlrLabel -> SupabaseLabel? in
+                guard let providerId = gtlrLabel.identifier, 
+                      let name = gtlrLabel.name, 
+                      let type = gtlrLabel.type else { return nil }
+                return SupabaseLabel(userId: userId, 
+                                   accountEmail: accountEmail, 
+                                   providerLabelId: providerId, 
+                                   name: name, 
+                                   type: type)
+            }
+            
+            guard !supabaseLabels.isEmpty else {
+                print("No valid labels to sync to Supabase for \(accountEmail).")
+                return
+            }
+            
+            print("Attempting to upsert \(supabaseLabels.count) labels to Supabase for \(accountEmail)...")
+            _ = try await supabase
+                .from("labels")
+                .upsert(supabaseLabels)
+                .execute()
+            print("Successfully upserted labels to Supabase for \(accountEmail).")
+            
+        } catch {
+            print("Error upserting labels to Supabase for \(accountEmail): \(error.localizedDescription)")
+            // We don't update the UI error message here since this is a background operation
+        }
+    }
 
     // MARK: - Email Fetching
     
-    // Fetches emails for all added accounts, replacing the old logic
-    func fetchAllInboxMessages() { // Keep name for now, but fetches threads
+    func fetchAllInboxMessages() {
+        Task {
+            await fetchAllInboxMessagesAsync()
+        }
+    }
+    
+    private func fetchAllInboxMessagesAsync() async {
         guard !isFetchingEmails else { return }
-        guard !addedAccounts.isEmpty else {
-            print("No accounts configured. Skipping fetch.")
-            // Clear the dictionary if no accounts exist
-            Task { await MainActor.run { self.emailsByAccount = [:] } }
+        guard let userId = authService?.currentUser?.id else {
+            print("Cannot fetch emails: User not authenticated.")
             return
         }
-        print("Starting fetch for all account inboxes (fetching threads)...")
-        isFetchingEmails = true
-        errorMessage = nil
+        guard !addedAccounts.isEmpty else {
+            print("No accounts configured. Skipping fetch.")
+            await MainActor.run { self.emailsByAccount = [:] }
+            return
+        }
+        
+        // Capture the current filter state
+        let currentAccountFilter = self.selectedAccountFilter
+        let currentLabelFilter = self.selectedLabelFilter
+        let filterDescription = currentLabelFilter != nil ? "Label: \(currentLabelFilter!)" : "All Mail"
+        
+        print("Starting fetch for \(currentAccountFilter == nil ? "all accounts" : currentAccountFilter!), \(filterDescription)...")
+        
+        await MainActor.run {
+            isFetchingEmails = true
+            errorMessage = nil
+            self.emailsByAccount = [:]
+            self.nextPageTokens = [:]
+        }
 
-        // --- Clear existing data for a fresh fetch --- 
-        self.emailsByAccount = [:]
-        self.nextPageTokens = [:]
-        // --- End Clear ---
+        var allFetchedEmailsByAccount: [String: [EmailDisplayData]] = [:] 
+        var allSupabaseEmails: [SupabaseEmail] = [] // To collect emails for DB
+        var allSupabaseEmailLabelLinks: [SupabaseEmailLabelLink] = [] // To collect links for DB
+        var fetchError: Error? = nil
 
-        // Use a TaskGroup to fetch for all accounts concurrently
-        Task {
-            var allFetchedEmailsByAccount: [String: [EmailDisplayData]] = [:] // Temporary dictionary
-            var fetchError: Error? = nil
-
-            // --- Capture filter state before entering TaskGroup --- 
-            let currentAccountFilter = self.selectedAccountFilter
-            let currentLabelFilter = self.selectedLabelFilter
-            // --- End capture --- 
-
-            await withTaskGroup(of: (String, Result<([GTLRGmail_Thread], String?), Error>).self) { group in
-                for account in addedAccounts {
-                    group.addTask {
-                        // Determine fetch parameters based on selected filters
-                        var fetchLabelIds: [String]? = nil
-                        var fetchSearchQuery: String? = nil
-
-                        // Apply filters ONLY if this account is the selected one
-                        // OR if no account is selected (All Inboxes)
-                        // Use the captured filter state here
-                        if currentAccountFilter == nil || currentAccountFilter == account.emailAddress {
-                            if let selectedLabel = currentLabelFilter {
-                                fetchLabelIds = [selectedLabel]
-                            } else {
-                                // If account is selected but no label, fetch "All Mail" for that account
-                                // If no account selected (All Inboxes), also fetch "All Mail" for this account
-                                fetchSearchQuery = "-label:spam -label:trash"
-                            }
-                        } else {
-                            // If this account isn't selected, don't fetch anything for it in this context
-                            // (or fetch default like INBOX if needed later)
-                            // Returning empty success to avoid breaking the group structure
-                            return (account.emailAddress, .success(([], nil))) 
-                        }
-                        
-                        // Use await for the async fetch call with parameters
-                        let result = await self.fetchThreadsForAccountAsync(account: account, labelIds: fetchLabelIds, searchQuery: fetchSearchQuery)
-                        return (account.emailAddress, result)
-                    }
+        await withTaskGroup(of: (String, Result<([GTLRGmail_Thread], String?), Error>).self) { group in
+            for account in addedAccounts {
+                // Skip accounts that don't match the current filter, if one is selected
+                if let accountFilter = currentAccountFilter, accountFilter != account.emailAddress {
+                    continue
                 }
-
-                // Collect results from the group
-                for await (accountEmail, result) in group {
-                    switch result {
-                    case .success(let threads):
-                        print("Successfully fetched \(threads.0.count) threads for \(accountEmail). Processing...")
-                        // Map threads, passing the account email
-                        let mappedEmails = self.mapAndStructureThreads(threads.0, for: accountEmail)
-                        allFetchedEmailsByAccount[accountEmail] = mappedEmails
-                        print("Finished processing threads for \(accountEmail). Count: \(mappedEmails.count)")
-                        self.nextPageTokens[accountEmail] = threads.1
-                    case .failure(let error):
-                        print("Failed to fetch threads for \(accountEmail): \(error.localizedDescription)")
-                        fetchError = error // Store the first encountered error
+                
+                group.addTask {
+                    // Determine fetch parameters based on selected filters
+                    var fetchLabelIds: [String]? = nil
+                    var fetchSearchQuery: String? = nil
+                    
+                    if let selectedLabel = currentLabelFilter {
+                        fetchLabelIds = [selectedLabel]
+                        print("Fetching label \(selectedLabel) for account \(account.emailAddress)")
+                    } else {
+                        // Default to fetching all mail except spam/trash
+                        fetchSearchQuery = "-label:spam -label:trash"
+                        print("Fetching All Mail for account \(account.emailAddress)")
                     }
+                    
+                    let result = await self.fetchThreadsForAccountAsync(account: account, labelIds: fetchLabelIds, searchQuery: fetchSearchQuery)
+                    return (account.emailAddress, result)
                 }
             }
 
-            // Update state on the main thread after all fetches complete
-            await MainActor.run {
-                self.isFetchingEmails = false
-                // Update the main dictionary with the fetched results
-                self.emailsByAccount = allFetchedEmailsByAccount
-                
-                if let error = fetchError {
-                    // Optionally, set a general error message if any fetch failed
-                    self.errorMessage = "Failed to load some emails: \(error.localizedDescription)"
+            // Collect results and map for DB
+            for await (accountEmail, result) in group {
+                switch result {
+                case .success(let (threads, nextPageToken)):
+                    print("Successfully fetched \(threads.count) threads for \(accountEmail). Processing...")
+                    
+                    // --- Map for UI (existing logic) ---
+                    let mappedEmailsForUI = self.mapAndStructureThreads(threads, for: accountEmail)
+                    allFetchedEmailsByAccount[accountEmail] = mappedEmailsForUI
+                    await MainActor.run { self.nextPageTokens[accountEmail] = nextPageToken }
+                    // --- End UI Mapping ---
+                    
+                    // --- Map for Database --- 
+                    for thread in threads {
+                        guard let messages = thread.messages else { continue }
+                        for message in messages {
+                            if let supabaseData = self.mapGTLRMessageToSupabaseData(message, userId: userId, accountEmail: accountEmail) {
+                                allSupabaseEmails.append(supabaseData.email)
+                                allSupabaseEmailLabelLinks.append(contentsOf: supabaseData.labelLinks)
+                            }
+                        }
+                    }
+                    // --- End DB Mapping ---
+                    
+                    print("Finished processing threads for \(accountEmail). UI Count: \(mappedEmailsForUI.count)")
+                    
+                case .failure(let error):
+                    print("Failed to fetch threads for \(accountEmail): \(error.localizedDescription)")
+                    fetchError = error
                 }
-                // TODO: Re-evaluate if mock injection is still needed here
-                // self.injectMockThread() // Inject mock after fetching real data
             }
         }
+
+        // Update UI state on the main thread
+        await MainActor.run {
+            self.isFetchingEmails = false
+            self.emailsByAccount = allFetchedEmailsByAccount // Update UI
+            if let error = fetchError {
+                self.errorMessage = "Failed to load some emails: \(error.localizedDescription)"
+            }
+        }
+        
+        // --- Upsert data to Supabase in the background --- 
+        if !allSupabaseEmails.isEmpty {
+            print("Attempting to upsert \(allSupabaseEmails.count) emails to Supabase...")
+            do {
+                _ = try await supabase.from("emails").upsert(allSupabaseEmails).execute()
+                print("Successfully upserted emails.")
+            } catch {
+                print("Error upserting emails to Supabase: \(error.localizedDescription)")
+            }
+        }
+        
+        if !allSupabaseEmailLabelLinks.isEmpty {
+            print("Attempting to upsert \(allSupabaseEmailLabelLinks.count) email-label links to Supabase...")
+             do {
+                _ = try await supabase.from("email_labels").upsert(allSupabaseEmailLabelLinks).execute()
+                print("Successfully upserted email-label links.")
+            } catch {
+                print("Error upserting email-label links to Supabase: \(error.localizedDescription)")
+            }
+        }
+        // --- End Supabase Upsert --- 
     }
 
     // Async helper to fetch threads for a single account
@@ -513,8 +677,89 @@ class UserViewModel: ObservableObject {
     }
     */
 
-    // Mapping function - Add accountEmail parameter
-    private func mapGTLRMessageToEmailDisplayData(_ gtlrMessage: GTLRGmail_Message, accountEmail: String) -> EmailDisplayData? { // Renamed & added param
+    // --- NEW: Helper function to map GTLR Message to Supabase Data --- 
+    private func mapGTLRMessageToSupabaseData(_ gtlrMessage: GTLRGmail_Message, userId: UUID, accountEmail: String) -> (email: SupabaseEmail, labelLinks: [SupabaseEmailLabelLink])? {
+        guard let providerMessageId = gtlrMessage.identifier else { return nil }
+        
+        // Extract date (prioritize internalDate)
+        var dateReceived: Date
+        if let internalDateMillis = gtlrMessage.internalDate?.int64Value {
+             dateReceived = Date(timeIntervalSince1970: TimeInterval(internalDateMillis) / 1000.0)
+        } else if let dateHeaderString = gtlrMessage.payload?.headers?.first(where: { $0.name?.uppercased() == "DATE" })?.value,
+                  let parsedDate = parseDateHeader(dateHeaderString) {
+            dateReceived = parsedDate
+        } else {
+            print("Warning: Using current date for email \(providerMessageId) as no valid date found.")
+            dateReceived = Date() // Fallback
+        }
+
+        // Extract other headers and details
+        var senderName: String? = nil
+        var senderEmail: String? = nil
+        var recipientTo: String? = nil // Simplified for now
+        var subject: String? = nil
+        var messageIdHeader: String? = nil
+        var referencesHeader: String? = nil
+
+        if let headers = gtlrMessage.payload?.headers {
+            for header in headers {
+                guard let name = header.name, let value = header.value else { continue }
+                switch name.uppercased() {
+                case "SUBJECT": subject = value
+                case "FROM": 
+                    let components = value.components(separatedBy: "<")
+                    senderName = components.first?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if components.count > 1, let emailPart = components.last?.trimmingCharacters(in: [">", " "]) {
+                        senderEmail = emailPart
+                    } else if value.contains("@") { senderEmail = value }
+                case "TO": recipientTo = value // Keep full To header for now
+                case "MESSAGE-ID": messageIdHeader = value
+                case "REFERENCES": referencesHeader = value
+                default: break
+                }
+            }
+        }
+        
+        let supabaseEmail = SupabaseEmail(
+            userId: userId,
+            accountEmail: accountEmail,
+            providerMessageId: providerMessageId,
+            threadId: gtlrMessage.threadId,
+            messageIdHeader: messageIdHeader,
+            referencesHeader: referencesHeader,
+            senderName: senderName,
+            senderEmail: senderEmail,
+            recipientTo: recipientTo,
+            recipientCc: nil, // TODO: Parse CC if needed
+            recipientBcc: nil, // TODO: Parse BCC if needed
+            subject: subject,
+            snippet: gtlrMessage.snippet,
+            dateReceived: dateReceived,
+            isRead: !(gtlrMessage.labelIds?.contains("UNREAD") ?? false),
+            // Simplification: Check if payload indicates parts exist, actual attachment download is separate
+            hasAttachments: (gtlrMessage.payload?.parts?.contains(where: { $0.filename != nil && !$0.filename!.isEmpty }) ?? false)
+            // createdAt/updatedAt are set by DB
+        )
+        
+        // Create Email-Label Links
+        let labelLinks = (gtlrMessage.labelIds ?? []).map {
+            SupabaseEmailLabelLink(userId: userId,
+                                   accountEmail: accountEmail, 
+                                   providerMessageId: providerMessageId, 
+                                   providerLabelId: $0)
+        }
+        
+        return (supabaseEmail, labelLinks)
+    }
+    // --- End DB Mapping Helper --- 
+
+    // Remove old mapping function if no longer needed, or keep for UI if structure differs significantly
+    // private func mapGTLRMessageToEmailDisplayData(...) -> EmailDisplayData? { ... }
+    // NOTE: mapAndStructureThreads still uses mapGTLRMessageToEmailDisplayData for the UI model.
+    // We need to decide if we want one mapping function returning both UI and DB models,
+    // or keep them separate. Keeping separate for now is less disruptive.
+    private func mapGTLRMessageToEmailDisplayData(_ gtlrMessage: GTLRGmail_Message, accountEmail: String) -> EmailDisplayData? { 
+        // ... (Keep existing implementation as it maps to the UI model EmailDisplayData) ...
         // Extract headers - Requires careful parsing
         var subject = "No Subject"
         var from = "Unknown Sender"
@@ -807,7 +1052,7 @@ class UserViewModel: ObservableObject {
         
         do {
             try await authService.signInWithEmail(email: email, password: password)
-            isLoading = false
+            // No need to set isLoading = false here, the auth state listener will trigger UI updates
         } catch let error as AuthError {
             handleError(error)
         } catch {
@@ -825,23 +1070,29 @@ class UserViewModel: ObservableObject {
         
         do {
             try await authService.signUpWithEmail(email: email, password: password)
-            isLoading = false
+             // No need to set isLoading = false here
         } catch let error as AuthError {
             handleError(error)
         } catch {
             handleError(AuthError.unknown(message: error.localizedDescription))
         }
     }
-    
-    func signOut() {
+
+    // signOut needs to be async now
+    func signOut() async { // Changed to async
         guard let authService = authService else { 
             handleError(.unknown(message: "AuthService not initialized"))
             return
         }
+        // Set isLoading to true for sign out
+        isLoading = true
         errorMessage = nil
         
         do {
-            try authService.signOut()
+            try await authService.signOut() // Call async version
+            // Manually reset loading state after signOut
+            isLoading = false
+            // State clearing is handled by the auth state listener's sink block
         } catch let error as AuthError {
             handleError(error)
         } catch {
@@ -859,7 +1110,7 @@ class UserViewModel: ObservableObject {
         
         do {
             try await authService.resetPassword(for: email)
-            isLoading = false
+            isLoading = false // Keep isLoading updates for non-state-change actions
         } catch let error as AuthError {
             handleError(error)
         } catch {
@@ -877,7 +1128,7 @@ class UserViewModel: ObservableObject {
         
         do {
             try await authService.signInWithApple(authorization: authorization)
-            isLoading = false
+            // No need to set isLoading = false here
         } catch let error as AuthError {
             handleError(error)
         } catch {
@@ -902,19 +1153,22 @@ class UserViewModel: ObservableObject {
     
     // Handle all authentication errors
     private func handleError(_ error: AuthError) {
-        isLoading = false
+        isLoading = false // Ensure loading state is reset on error
         
         switch error {
         case .signInError(let message),
              .signUpError(let message),
              .signOutError(let message),
+             .resetPasswordError(let message),
+             .appleSignInError(let message),
              .unknown(let message):
             errorMessage = message
-        case .userNotFound:
-            errorMessage = "User not found. Please check your email or sign up."
-        case .invalidCredentials:
-            errorMessage = "Invalid email or password. Please try again."
+        case .userNotFound: // May map to specific Supabase errors if needed
+            errorMessage = "User not found or invalid credentials."
+        case .invalidCredentials: // Covered by Supabase errors generally
+            errorMessage = "Invalid credentials. Please try again."
         }
+         print("Auth Error Handled: \(errorMessage ?? "No message")")
     }
 
     // MARK: - Fetch Full Email Body
@@ -1089,17 +1343,23 @@ class UserViewModel: ObservableObject {
     // MARK: - Filtered Fetching
 
     func fetchMessagesForCurrentFilter() async {
-        guard let accountEmail = selectedAccountFilter else {
-            print("Filter Fetch: Cannot fetch, no account selected.")
-            // If no account is selected, it implies "All Inboxes". 
-            // We might need to refresh all inboxes here, similar to fetchAllInboxMessages.
-            // For now, we only handle fetches when a specific account is selected.
-            // Consider calling fetchAllInboxMessages() if appropriate for 'All Inboxes'.
-            return 
+        guard authService?.currentUser != nil else {
+            print("Cannot fetch emails: User not authenticated.")
+            return
         }
         
+        // If no account is selected, it means "All Inboxes" (combined view)
+        if selectedAccountFilter == nil {
+            // For "All Inboxes", use fetchAllInboxMessages which handles filtering across all accounts
+            print("Filter Fetch: No account selected, fetching emails for All Inboxes")
+            await fetchAllInboxMessages()
+            return
+        }
+        
+        let accountEmail = selectedAccountFilter!
+        
         guard let account = addedAccounts.first(where: { $0.emailAddress == accountEmail }) else {
-            print("Filter Fetch: Account object not found for \\(accountEmail)")
+            print("Filter Fetch: Account object not found for \(accountEmail)")
             return
         }
 
@@ -1108,22 +1368,16 @@ class UserViewModel: ObservableObject {
         var fetchDescription = "" // For logging
         if let labelId = selectedLabelFilter {
             labelIdsToFetch = [labelId]
-            fetchDescription = "label '\\(labelId)'"
+            fetchDescription = "label '\(labelId)'"
         } else {
-            // If no specific label is selected for the account, what should we fetch?
-            // Option 1: Default to INBOX
-            // labelIdsToFetch = ["INBOX"] 
-            // fetchDescription = "default INBOX"
-            // Option 2: Fetch "All Mail" (excluding spam/trash) - Requires different query?
-            // For now, let's assume if selectedLabelFilter is nil for a specific account,
-            // it means "All Mail" for that account. The API call might need adjustment.
-            // Let's default to fetching INBOX if no label is selected, for simplicity now.
-             labelIdsToFetch = ["INBOX"] // Defaulting to INBOX for now if filter is nil
-             fetchDescription = "default INBOX (nil filter)"
-            print("Filter Fetch: No specific label selected for \\(accountEmail). Defaulting to fetch INBOX.")
+            // Use a search query for "All Mail" instead of default INBOX
+            // This way we get all messages except trash and spam
+            labelIdsToFetch = nil
+            fetchDescription = "All Mail"
+            print("Filter Fetch: No specific label selected for \(accountEmail). Fetching All Mail.")
         }
         
-        print("Filter Fetch: Starting fetch for account \\(accountEmail), \(fetchDescription)")
+        print("Filter Fetch: Starting fetch for account \(accountEmail), \(fetchDescription)")
         
         await MainActor.run { // Ensure UI updates happen on main thread
              isFetchingEmails = true
@@ -1135,28 +1389,132 @@ class UserViewModel: ObservableObject {
         }
 
         // Fetch threads for the specific account and label
-        let result = await fetchThreadsForAccountAsync(account: account, labelIds: labelIdsToFetch)
+        let result = await fetchThreadsForAccountAsync(account: account, labelIds: labelIdsToFetch, 
+                                                     searchQuery: labelIdsToFetch == nil ? "-label:spam -label:trash" : nil)
         
         // Update state on the main thread
         await MainActor.run {
             isFetchingEmails = false // Fetch complete
             switch result {
             case .success(let (threads, nextPageToken)):
-                print("Filter Fetch: Successfully fetched \\(threads.count) threads for \\(accountEmail), \(fetchDescription). Mapping...")
+                print("Filter Fetch: Successfully fetched \(threads.count) threads for \(accountEmail), \(fetchDescription). Mapping...")
                 let mappedEmails = self.mapAndStructureThreads(threads, for: accountEmail)
                 // Replace the emails for this account with the newly fetched ones
                 emailsByAccount[accountEmail] = mappedEmails
                 nextPageTokens[accountEmail] = nextPageToken // Store new pagination token
-                // Fix interpolation for optional token
-                print("Filter Fetch: Updated cache for \\(accountEmail). Total: \\(mappedEmails.count). Next Token: \(String(describing: nextPageToken))")
+                print("Filter Fetch: Updated cache for \(accountEmail). Total: \(mappedEmails.count). Next Token: \(String(describing: nextPageToken))")
 
             case .failure(let error):
-                print("Filter Fetch: Failed fetch for \\(accountEmail), \(fetchDescription): \(error.localizedDescription)")
+                print("Filter Fetch: Failed fetch for \(accountEmail), \(fetchDescription): \(error.localizedDescription)")
                 errorMessage = "Failed to load emails for selected filter."
-                // Keep the account's email list empty on failure? Or revert? Empty is simpler.
+                // Keep the account's email list empty on failure
                 emailsByAccount[accountEmail] = [] 
                 nextPageTokens[accountEmail] = nil
             }
         }
     }
+
+    // --- Add the new private functions here ---
+    @MainActor
+    private func loadLabelsFromDatabase(for userId: UUID) async {
+        print("Attempting to load labels from database for user: \(userId)")
+        do {
+            let storedLabels: [SupabaseLabel] = try await supabase
+                .from("labels")
+                .select()
+                .eq("user_id", value: userId.uuidString)
+                .execute()
+                .value
+
+            // Map SupabaseLabel back to GTLRGmail_Label for UI state
+            var labelsGrouped: [String: [GTLRGmail_Label]] = [:]
+            for labelData in storedLabels {
+                let gtlrLabel = GTLRGmail_Label()
+                gtlrLabel.identifier = labelData.providerLabelId
+                gtlrLabel.name = labelData.name
+                gtlrLabel.type = labelData.type
+                labelsGrouped[labelData.accountEmail, default: []].append(gtlrLabel)
+            }
+
+            self.labelsByAccount = labelsGrouped
+            print("Successfully loaded \(storedLabels.count) labels from database into UI state.")
+
+        } catch {
+            print("Error loading labels from database: \(error.localizedDescription)")
+            self.errorMessage = "Failed to load label cache: \(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func loadEmailsFromDatabase(for userId: UUID) async {
+        print("Attempting to load emails from database for user: \(userId)")
+        do {
+            let storedEmails: [SupabaseEmail] = try await supabase
+                .from("emails")
+                .select()
+                .eq("user_id", value: userId.uuidString)
+                .order("date_received", ascending: false)
+                .limit(200) // Add a reasonable limit for initial load
+                .execute()
+                .value
+                
+            // Early exit if no emails cached    
+            guard !storedEmails.isEmpty else {
+                 print("No cached emails found in database.")
+                 self.emailsByAccount = [:] // Ensure UI state is cleared
+                 return
+            }
+
+            // Fetch email-label links for the loaded emails
+            let emailIds = storedEmails.map { $0.providerMessageId }
+            let storedLinks: [SupabaseEmailLabelLink] = try await supabase
+                .from("email_labels")
+                .select()
+                .eq("user_id", value: userId.uuidString)
+                .in("provider_message_id", values: emailIds) // Filter links for fetched emails
+                .execute()
+                .value
+
+            var emailsGrouped: [String: [EmailDisplayData]] = [:]
+            var labelsPerMessage: [String: [String]] = [:] 
+            for link in storedLinks {
+                labelsPerMessage[link.providerMessageId, default: []].append(link.providerLabelId)
+            }
+
+            for emailData in storedEmails {
+                let displayData = EmailDisplayData(
+                    gmailMessageId: emailData.providerMessageId,
+                    threadId: emailData.threadId,
+                    messageIdHeader: emailData.messageIdHeader,
+                    referencesHeader: emailData.referencesHeader,
+                    sender: emailData.senderName ?? emailData.senderEmail ?? "Unknown Sender",
+                    senderEmail: emailData.senderEmail,
+                    recipient: emailData.recipientTo, 
+                    subject: emailData.subject ?? "No Subject",
+                    snippet: emailData.snippet ?? "",
+                    body: "",
+                    date: emailData.dateReceived,
+                    isRead: emailData.isRead,
+                    previousMessages: nil, 
+                    accountEmail: emailData.accountEmail,
+                    labelIds: labelsPerMessage[emailData.providerMessageId] ?? []
+                )
+                emailsGrouped[emailData.accountEmail, default: []].append(displayData)
+            }
+            
+            // Sort emails within each account if DB didn't guarantee order
+            // for key in emailsGrouped.keys {
+            //     emailsGrouped[key]?.sort { $0.date > $1.date }
+            // }
+
+            self.emailsByAccount = emailsGrouped
+            print("Successfully loaded \(storedEmails.count) emails from database into UI state.")
+
+        } catch {
+            print("Error loading emails from database: \(error.localizedDescription)")
+            self.errorMessage = "Failed to load email cache: \(error.localizedDescription)"
+            self.emailsByAccount = [:] // Clear cache on error
+        }
+    }
+    // --- End new private functions ---
 } 

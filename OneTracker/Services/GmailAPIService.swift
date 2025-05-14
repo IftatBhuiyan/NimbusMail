@@ -79,57 +79,51 @@ class GmailAPIService {
         }
     }
     
-    // MARK: - Authentication Helper (Placeholder)
+    // MARK: - Authentication Helper
     
-    // This is the complex part. It needs to securely retrieve the refresh token
-    // and use it to obtain a fresh access token.
-    // Libraries like GTMAppAuth can simplify this significantly.
-    // Update signature and completion handler to use GTMSessionFetcherAuthorizer
     private func getAuthorizer(for userEmail: String, completion: @escaping (Result<GTMSessionFetcherAuthorizer, Error>) -> Void) {
         // 1. Load Refresh Token from Keychain
-        guard let refreshToken = KeychainService.loadToken(account: userEmail) else {
+        guard KeychainService.loadToken(account: userEmail) != nil else {
             print("Error: Could not load refresh token for \(userEmail) from Keychain.")
-            completion(.failure(NSError(domain: "GmailAPIService", code: -2, userInfo: [NSLocalizedDescriptionKey: "Missing refresh token"])))
+            completion(.failure(NSError(domain: "GmailAPIService", code: 1001, userInfo: [NSLocalizedDescriptionKey: "Refresh token not available for \(userEmail)"])))
             return
         }
-        // Acknowledge refreshToken to silence warning (it's used via Keychain implicitly)
-        _ = refreshToken
         
-        // 2. TODO: Implement Token Refresh Logic
-        //    - This typically involves an HTTPS POST request to Google's token endpoint
-        //      (https://oauth2.googleapis.com/token) with:
-        //        - client_id: Your app's client ID
-        //        - client_secret: *If applicable* (for server-side apps, usually NOT for iOS)
-        //        - refresh_token: The token loaded from Keychain
-        //        - grant_type: "refresh_token"
-        //    - Parse the response to get the new access_token and its expiry time.
-        
-        // 3. TODO: Create Authorizer Object
-        //    - Once you have a valid access_token, create an authorizer object.
-        //    - If using GTMAppAuth, it manages this process for you.
-        //    - If doing manually, you might use GTMSessionFetcherAuthorizer or similar.
-        
-        // --- Placeholder --- 
-        print("Placeholder: Token refresh logic needed in getAuthorizer.")
-        // For now, try using GIDSignIn's currentUser for a potentially valid (but maybe expired) authorizer
-        // THIS IS NOT RELIABLE FOR BACKGROUND FETCHING - ONLY FOR IMMEDIATE POST-SIGN-IN CALLS
-        
-        // Check if currentUser exists, then directly access fetcherAuthorizer (it's not optional)
-        if let currentUser = GIDSignIn.sharedInstance.currentUser {
-            // Cast the non-optional protocol to the required class type
-            if let authorizer = currentUser.fetcherAuthorizer as? GTMSessionFetcherAuthorizer {
-                 print("Using authorizer from GIDSignIn.sharedInstance.currentUser (may be expired)")
-                 completion(.success(authorizer))
-             } else {
-                 // This case is unlikely if fetcherAuthorizer exists but might happen if types change
-                 print("Error: Could not cast fetcherAuthorizer to GTMSessionFetcherAuthorizer.")
-                 completion(.failure(NSError(domain: "GmailAPIService", code: -4, userInfo: [NSLocalizedDescriptionKey: "Authorizer type mismatch"])))
-             }
-        } else {
-            print("Error: No Google user signed in. Need token refresh logic or sign-in.")
-            completion(.failure(NSError(domain: "GmailAPIService", code: -3, userInfo: [NSLocalizedDescriptionKey: "Authorization failed - No user signed in"])))
+        // 2. First try using GIDSignIn's currentUser if available (for immediate post-sign in usage)
+        if let currentUser = GIDSignIn.sharedInstance.currentUser, 
+           let authorizer = currentUser.fetcherAuthorizer as? GTMSessionFetcherAuthorizer {
+            print("Using authorizer from GIDSignIn.sharedInstance.currentUser (may be expired)")
+            completion(.success(authorizer))
+            return
         }
-        // --- End Placeholder --- 
+        
+        // 3. Otherwise, manually refresh the token using GoogleSignIn's restorePreviousSignIn
+        print("No current signed-in user, attempting to restore previous sign-in state with refresh token")
+        
+        // Attempt to restore sign-in state using the refresh token
+        GIDSignIn.sharedInstance.restorePreviousSignIn { user, error in
+            if let error = error {
+                print("Failed to restore previous sign-in: \(error.localizedDescription)")
+                completion(.failure(NSError(domain: "GmailAPIService", code: -3, userInfo: [NSLocalizedDescriptionKey: "Failed to restore sign-in: \(error.localizedDescription)"])))
+                return
+            }
+            
+            guard let user = user else {
+                print("No user returned from restorePreviousSignIn")
+                completion(.failure(NSError(domain: "GmailAPIService", code: -4, userInfo: [NSLocalizedDescriptionKey: "No user returned from restorePreviousSignIn"])))
+                return
+            }
+            
+            // Get the authorizer from the restored user
+            guard let authorizer = user.fetcherAuthorizer as? GTMSessionFetcherAuthorizer else {
+                print("Error: Could not get GTMSessionFetcherAuthorizer from restored user")
+                completion(.failure(NSError(domain: "GmailAPIService", code: -5, userInfo: [NSLocalizedDescriptionKey: "Could not get GTMSessionFetcherAuthorizer from restored user"])))
+                return
+            }
+            
+            print("Successfully restored sign-in state and obtained fresh authorizer")
+            completion(.success(authorizer))
+        }
     }
     
     // MARK: - Fetching Threads (Replaces fetchInboxMessages)

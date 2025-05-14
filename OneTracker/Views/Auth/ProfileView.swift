@@ -1,5 +1,6 @@
 import SwiftUI
-import FirebaseAuth
+// import FirebaseAuth // Remove Firebase import
+import Supabase // Add Supabase import if needed for User type info
 
 struct ProfileView: View {
     @ObservedObject var viewModel: UserViewModel
@@ -36,12 +37,12 @@ struct ProfileView: View {
                         
                         Divider()
                         
-                        if let user = Auth.auth().currentUser {
+                        // Use Supabase user data if available
+                        if let user = viewModel.authService?.currentUser { // Access via viewModel/authService
                             ProfileInfoRow(icon: "lock.shield.fill", label: "Sign-in Provider", value: getProviderName(for: user))
                             
-                            if let creationDate = user.metadata.creationDate {
-                                ProfileInfoRow(icon: "calendar", label: "Account Created", value: formattedDate(creationDate))
-                            }
+                            let creationDate = user.createdAt
+                            ProfileInfoRow(icon: "calendar", label: "Account Created", value: formattedDate(creationDate))
                         }
                     }
                     .padding()
@@ -50,7 +51,9 @@ struct ProfileView: View {
                     // Actions Section (Neumorphic Card)
                     VStack(spacing: 0) { // Use spacing 0 for divider consistency
                         Button(action: {
-                            viewModel.signOut()
+                            Task { // Call async signOut within a Task
+                                await viewModel.signOut()
+                            }
                             // Presentation mode dismiss is handled by the TabView change
                         }) {
                             HStack {
@@ -105,18 +108,20 @@ struct ProfileView: View {
              .shadow(color: lightDropShadowColor, radius: lightDropShadowBlur / 2, x: lightDropShadowX / 2, y: lightDropShadowY / 2)
     }
     
-    // Helper methods (Keep existing ones)
-    private func getProviderName(for user: User) -> String {
-        if let providerData = user.providerData.first {
-            switch providerData.providerID {
-            case "apple.com": return "Apple"
-            case "password": return "Email & Password"
-            // Add other providers if needed (e.g., Google)
-            // case "google.com": return "Google"
-            default: return providerData.providerID.capitalized
-            }
+    // Helper method adjusted for Supabase User
+    private func getProviderName(for user: User) -> String { // Parameter is now Supabase.User
+        // Check appMetadata first
+        if let providerJSON = user.appMetadata["provider"], case .string(let providerString) = providerJSON {
+            // Common provider names from Supabase might be 'email', 'apple', 'google', etc.
+            return providerString.capitalized
+        } 
+        // Fallback to checking identities array
+        else if let firstIdentity = user.identities?.first {
+             // Access non-optional 'provider' directly
+             return firstIdentity.provider.capitalized
         }
-        return "Unknown"
+        // Fallback if provider info isn't readily available
+        return user.aud // Often 'authenticated'
     }
     
     private func formattedDate(_ date: Date) -> String {
@@ -131,11 +136,12 @@ struct ProfileView: View {
 struct ProfileView_Previews: PreviewProvider {
     static var previews: some View {
         // Create a mock UserViewModel for preview
-        let mockViewModel = UserViewModel()
-        mockViewModel.isAuthenticated = true
-        mockViewModel.userName = "Preview User"
-        mockViewModel.userEmail = "preview@example.com"
-        // You might need to mock Firebase User data for provider/creation date
+        let mockViewModel = UserViewModel( // Use the preview initializer
+            isAuthenticated: true,
+            userEmail: "preview@example.com",
+            userName: "Preview User"
+            // No need to mock Supabase user details directly here for basic preview
+        )
         
         return ProfileView(viewModel: mockViewModel)
             .environmentObject(mockViewModel)

@@ -1,6 +1,7 @@
 import UIKit
 import SwiftUI
-import FirebaseAuth
+// import FirebaseAuth // Remove Firebase import
+import Supabase // Add Supabase import
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
@@ -10,28 +11,40 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         
         // Handle URL if provided in connection options
         if let urlContext = connectionOptions.urlContexts.first {
-            handleIncomingDynamicLink(urlContext.url)
+            handleIncomingURL(urlContext.url)
         }
     }
     
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         // Handle URLs when the app is already running
         if let urlContext = URLContexts.first {
-            handleIncomingDynamicLink(urlContext.url)
+            handleIncomingURL(urlContext.url)
         }
     }
     
-    private func handleIncomingDynamicLink(_ incomingURL: URL) {
-        // Handle Firebase Auth dynamic links (password reset, email verification, etc.)
-        let link = incomingURL.absoluteString
+    private func handleIncomingURL(_ incomingURL: URL) {
+        // --- Remove Firebase Dynamic Link Handling --- 
+        // let link = incomingURL.absoluteString
+        // if Auth.auth().isSignIn(withEmailLink: link) {
+        //     UserDefaults.standard.set(link, forKey: "EmailSignInLink")
+        //     NotificationCenter.default.post(Notification(name: Notification.Name("EmailSignInLinkNotification"))) 
+        // }
         
-        // Check if the link is a Firebase Auth sign-in link
-        if Auth.auth().isSignIn(withEmailLink: link) {
-            // Save the link for passwordless authentication
-            UserDefaults.standard.set(link, forKey: "EmailSignInLink")
-            
-            // Post notification for auth components
-            NotificationCenter.default.post(Notification(name: Notification.Name("EmailSignInLinkNotification")))
+        // --- Add Supabase Deep Link Handling (Example) --- 
+        // Check if the URL is intended for Supabase Auth
+        Task { // Perform async check
+            do {
+                // Attempt to create a session from the URL (e.g., for email link auth, magic link)
+                // This automatically handles the session update if the link is valid.
+                let session = try await supabase.auth.session(from: incomingURL)
+                print("Successfully handled Supabase auth deep link. Session user: \(session.user.email ?? "N/A")")
+                // The auth state listener in AuthenticationService will automatically update the UI.
+            } catch {
+                // Check if it's a recoverable error or just not a Supabase link
+                // You might want more specific error handling based on Supabase errors
+                print("Incoming URL is not a valid Supabase session URL or an error occurred: \(error.localizedDescription)")
+                // Handle other deep links if necessary
+            }
         }
     }
 } 

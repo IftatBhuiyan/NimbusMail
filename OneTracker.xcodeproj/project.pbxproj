@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		3BCFF2A12DA99CE600B8DA78 /* LinkKit in Frameworks */ = {isa = PBXBuildFile; productRef = 3BCFF2A02DA99CE600B8DA78 /* LinkKit */; };
 		3BCFF2A42DA9A3A500B8DA78 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 3BCFF2A32DA9A3A500B8DA78 /* FirebaseAnalytics */; };
 		3BCFF2A62DA9A3A500B8DA78 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 3BCFF2A52DA9A3A500B8DA78 /* FirebaseAuth */; };
 		3BCFF2AA2DA9A3A500B8DA78 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3BCFF2A92DA9A3A500B8DA78 /* FirebaseCore */; };
@@ -19,6 +18,12 @@
 		3BCFF38A2DAC97A800B8DA78 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 3BCFF3892DAC97A800B8DA78 /* GoogleSignInSwift */; };
 		3BCFF3962DAC9EE500B8DA78 /* GoogleAPIClientForREST_Gmail in Frameworks */ = {isa = PBXBuildFile; productRef = 3BCFF3952DAC9EE500B8DA78 /* GoogleAPIClientForREST_Gmail */; };
 		3BCFF3992DAC9FEB00B8DA78 /* GoogleAPIClientForRESTCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3BCFF3982DAC9FEB00B8DA78 /* GoogleAPIClientForRESTCore */; };
+		3BFC1F972DB72CBB00EC2063 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 3BFC1F962DB72CBB00EC2063 /* Auth */; };
+		3BFC1F992DB72CBB00EC2063 /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = 3BFC1F982DB72CBB00EC2063 /* Functions */; };
+		3BFC1F9B2DB72CBB00EC2063 /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = 3BFC1F9A2DB72CBB00EC2063 /* PostgREST */; };
+		3BFC1F9D2DB72CBB00EC2063 /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = 3BFC1F9C2DB72CBB00EC2063 /* Realtime */; };
+		3BFC1F9F2DB72CBB00EC2063 /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = 3BFC1F9E2DB72CBB00EC2063 /* Storage */; };
+		3BFC1FA12DB72CBB00EC2063 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 3BFC1FA02DB72CBB00EC2063 /* Supabase */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -80,15 +85,20 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3BFC1F992DB72CBB00EC2063 /* Functions in Frameworks */,
 				3BCFF2AC2DA9A3A500B8DA78 /* FirebaseDatabase in Frameworks */,
+				3BFC1F9B2DB72CBB00EC2063 /* PostgREST in Frameworks */,
+				3BFC1F9D2DB72CBB00EC2063 /* Realtime in Frameworks */,
 				3BCFF2A42DA9A3A500B8DA78 /* FirebaseAnalytics in Frameworks */,
+				3BFC1F972DB72CBB00EC2063 /* Auth in Frameworks */,
 				3BCFF2AA2DA9A3A500B8DA78 /* FirebaseCore in Frameworks */,
 				3BCFF2B02DA9A3A500B8DA78 /* FirebaseFunctions in Frameworks */,
 				3BCFF2A62DA9A3A500B8DA78 /* FirebaseAuth in Frameworks */,
 				3BCFF38A2DAC97A800B8DA78 /* GoogleSignInSwift in Frameworks */,
 				3BCFF3962DAC9EE500B8DA78 /* GoogleAPIClientForREST_Gmail in Frameworks */,
-				3BCFF2A12DA99CE600B8DA78 /* LinkKit in Frameworks */,
+				3BFC1FA12DB72CBB00EC2063 /* Supabase in Frameworks */,
 				3BCFF2B22DA9A3A500B8DA78 /* FirebaseMLModelDownloader in Frameworks */,
+				3BFC1F9F2DB72CBB00EC2063 /* Storage in Frameworks */,
 				3BCFF2AE2DA9A3A500B8DA78 /* FirebaseFirestore in Frameworks */,
 				3BCFF3992DAC9FEB00B8DA78 /* GoogleAPIClientForRESTCore in Frameworks */,
 				3BCFF3882DAC97A800B8DA78 /* GoogleSignIn in Frameworks */,
@@ -160,7 +170,6 @@
 			);
 			name = OneTracker;
 			packageProductDependencies = (
-				3BCFF2A02DA99CE600B8DA78 /* LinkKit */,
 				3BCFF2A32DA9A3A500B8DA78 /* FirebaseAnalytics */,
 				3BCFF2A52DA9A3A500B8DA78 /* FirebaseAuth */,
 				3BCFF2A92DA9A3A500B8DA78 /* FirebaseCore */,
@@ -172,6 +181,12 @@
 				3BCFF3892DAC97A800B8DA78 /* GoogleSignInSwift */,
 				3BCFF3952DAC9EE500B8DA78 /* GoogleAPIClientForREST_Gmail */,
 				3BCFF3982DAC9FEB00B8DA78 /* GoogleAPIClientForRESTCore */,
+				3BFC1F962DB72CBB00EC2063 /* Auth */,
+				3BFC1F982DB72CBB00EC2063 /* Functions */,
+				3BFC1F9A2DB72CBB00EC2063 /* PostgREST */,
+				3BFC1F9C2DB72CBB00EC2063 /* Realtime */,
+				3BFC1F9E2DB72CBB00EC2063 /* Storage */,
+				3BFC1FA02DB72CBB00EC2063 /* Supabase */,
 			);
 			productName = OneTracker;
 			productReference = 3B2C5D392DA62829009C50AA /* OneTracker.app */;
@@ -256,10 +271,10 @@
 			mainGroup = 3B2C5D302DA62829009C50AA;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				3BCFF29F2DA99CE600B8DA78 /* XCRemoteSwiftPackageReference "plaid-link-ios-spm" */,
 				3BCFF2A22DA9A3A500B8DA78 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				3BCFF3862DAC97A800B8DA78 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				3BCFF3942DAC9EE500B8DA78 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */,
+				3BFC1F952DB72CBB00EC2063 /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 3B2C5D3A2DA62829009C50AA /* Products */;
@@ -638,14 +653,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		3BCFF29F2DA99CE600B8DA78 /* XCRemoteSwiftPackageReference "plaid-link-ios-spm" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/plaid/plaid-link-ios-spm";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 6.0.4;
-			};
-		};
 		3BCFF2A22DA9A3A500B8DA78 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
@@ -670,14 +677,17 @@
 				kind = branch;
 			};
 		};
+		3BFC1F952DB72CBB00EC2063 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		3BCFF2A02DA99CE600B8DA78 /* LinkKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 3BCFF29F2DA99CE600B8DA78 /* XCRemoteSwiftPackageReference "plaid-link-ios-spm" */;
-			productName = LinkKit;
-		};
 		3BCFF2A32DA9A3A500B8DA78 /* FirebaseAnalytics */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 3BCFF2A22DA9A3A500B8DA78 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
@@ -732,6 +742,36 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 3BCFF3942DAC9EE500B8DA78 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */;
 			productName = GoogleAPIClientForRESTCore;
+		};
+		3BFC1F962DB72CBB00EC2063 /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3BFC1F952DB72CBB00EC2063 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
+		};
+		3BFC1F982DB72CBB00EC2063 /* Functions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3BFC1F952DB72CBB00EC2063 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Functions;
+		};
+		3BFC1F9A2DB72CBB00EC2063 /* PostgREST */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3BFC1F952DB72CBB00EC2063 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = PostgREST;
+		};
+		3BFC1F9C2DB72CBB00EC2063 /* Realtime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3BFC1F952DB72CBB00EC2063 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Realtime;
+		};
+		3BFC1F9E2DB72CBB00EC2063 /* Storage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3BFC1F952DB72CBB00EC2063 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Storage;
+		};
+		3BFC1FA02DB72CBB00EC2063 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3BFC1F952DB72CBB00EC2063 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

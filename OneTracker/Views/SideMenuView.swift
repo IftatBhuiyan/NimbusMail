@@ -1,5 +1,5 @@
 import SwiftUI
-import FirebaseAuth
+import Supabase
 
 // REMOVE Mock Data Structures - They are now in EmailAccountModels.swift
 /*
@@ -56,6 +56,11 @@ struct SideMenuView: View {
                         viewModel.selectedLabelFilter = nil // Ensure label filter is also cleared
                         withAnimation { isShowing = false } 
                         print("Selected Filter: All Inboxes")
+                        
+                        // Explicitly trigger a fetch for all inboxes
+                        Task {
+                            await viewModel.fetchAllInboxMessages()
+                        }
                     } label: {
                         Label("All Inboxes", systemImage: "tray.and.arrow.down.fill")
                     }
@@ -158,6 +163,11 @@ struct SideMenuView: View {
                                         viewModel.selectedLabelFilter = nil // nil signifies All Mail
                                         withAnimation { isShowing = false } // Close menu
                                         print("Tapped label: All Mail (nil) for \(account.emailAddress)")
+                                        
+                                        // Explicitly trigger a fetch for this account's All Mail
+                                        Task {
+                                            await viewModel.fetchMessagesForCurrentFilter()
+                                        }
                                     } label: {
                                         Label("All Mail", systemImage: "tray.full.fill") // Use suitable icon
                                             .font(.subheadline)
@@ -169,7 +179,18 @@ struct SideMenuView: View {
                                 .padding(.leading, 10)
                                 .padding(.vertical, 5) // Reduced vertical padding
                                 .onAppear { 
-                                    viewModel.fetchLabels(for: account)
+                                    // Only trigger fetch if we don't have labels yet or the last fetch was a long time ago
+                                    if viewModel.labelsByAccount[account.emailAddress]?.isEmpty ?? true {
+                                        viewModel.fetchLabels(for: account)
+                                    } else {
+                                        // If we already have labels, fetch in the background for updates
+                                        // but don't trigger immediately to prevent UI flickering
+                                        Task {
+                                            // Small delay to prevent immediate fetch when toggling disclosure group
+                                            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                                            viewModel.fetchLabels(for: account)
+                                        }
+                                    }
                                 }
                             },
                             label: { 
@@ -178,6 +199,11 @@ struct SideMenuView: View {
                                     viewModel.selectedLabelFilter = "INBOX"
                                     withAnimation { isShowing = false } 
                                     print("Selected Filter: \(account.emailAddress), Label: INBOX")
+                                    
+                                    // Explicitly trigger a fetch for this account's inbox
+                                    Task {
+                                        await viewModel.fetchMessagesForCurrentFilter()
+                                    }
                                 } label: {
                                      Label(account.emailAddress, systemImage: "envelope.fill")
                                          .font(.subheadline) // Make account labels slightly smaller
@@ -203,13 +229,96 @@ struct SideMenuView: View {
                     Divider().padding(.vertical, 5) // Reduced divider padding
                     
                     // 5. Combined Categories (Static for now)
-                    Button { print("Go to Pinned") } label: { Label("Pinned", systemImage: "pin.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
-                    Button { print("Go to Unread") } label: { Label("Unread", systemImage: "envelope.badge.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
-                    Button { print("Go to Sent") } label: { Label("Sent", systemImage: "paperplane.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
-                    Button { print("Go to Drafts") } label: { Label("Drafts", systemImage: "doc.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
-                    Button { print("Go to Scheduled") } label: { Label("Scheduled", systemImage: "clock.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
-                    Button { print("Go to Archive") } label: { Label("Archive", systemImage: "archivebox.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
-                    Button { print("Go to Trash") } label: { Label("Trash", systemImage: "trash.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
+                    Button { 
+                        // Set up for combined view of STARRED across all accounts
+                        viewModel.selectedAccountFilter = nil // All accounts
+                        viewModel.selectedLabelFilter = "STARRED"
+                        withAnimation { isShowing = false }
+                        print("Selected Filter: All Accounts, Label: STARRED")
+                        
+                        // Trigger fetch for this filter
+                        Task {
+                            viewModel.fetchAllInboxMessages()
+                        }
+                    } label: { Label("Pinned", systemImage: "pin.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
+                    
+                    Button { 
+                        // Set up for combined view of UNREAD across all accounts
+                        viewModel.selectedAccountFilter = nil // All accounts
+                        viewModel.selectedLabelFilter = "UNREAD"
+                        withAnimation { isShowing = false }
+                        print("Selected Filter: All Accounts, Label: UNREAD")
+                        
+                        // Trigger fetch for this filter
+                        Task {
+                            viewModel.fetchAllInboxMessages()
+                        }
+                    } label: { Label("Unread", systemImage: "envelope.badge.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
+                    
+                    Button { 
+                        // Set up for combined view of SENT across all accounts
+                        viewModel.selectedAccountFilter = nil // All accounts
+                        viewModel.selectedLabelFilter = "SENT"
+                        withAnimation { isShowing = false }
+                        print("Selected Filter: All Accounts, Label: SENT")
+                        
+                        // Trigger fetch for this filter
+                        Task {
+                            viewModel.fetchAllInboxMessages()
+                        }
+                    } label: { Label("Sent", systemImage: "paperplane.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
+                    
+                    Button { 
+                        // Set up for combined view of DRAFT across all accounts
+                        viewModel.selectedAccountFilter = nil // All accounts
+                        viewModel.selectedLabelFilter = "DRAFT"
+                        withAnimation { isShowing = false }
+                        print("Selected Filter: All Accounts, Label: DRAFT")
+                        
+                        // Trigger fetch for this filter
+                        Task {
+                            viewModel.fetchAllInboxMessages()
+                        }
+                    } label: { Label("Drafts", systemImage: "doc.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
+                    
+                    Button { 
+                        // Set up for combined view of CATEGORY_UPDATES across all accounts
+                        viewModel.selectedAccountFilter = nil // All accounts
+                        viewModel.selectedLabelFilter = "CATEGORY_UPDATES"
+                        withAnimation { isShowing = false }
+                        print("Selected Filter: All Accounts, Label: CATEGORY_UPDATES")
+                        
+                        // Trigger fetch for this filter
+                        Task {
+                            viewModel.fetchAllInboxMessages()
+                        }
+                    } label: { Label("Scheduled", systemImage: "clock.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
+                    
+                    Button { 
+                        // Set up for combined view of CATEGORY_PERSONAL across all accounts
+                        viewModel.selectedAccountFilter = nil // All accounts
+                        viewModel.selectedLabelFilter = "CATEGORY_PERSONAL"
+                        withAnimation { isShowing = false }
+                        print("Selected Filter: All Accounts, Label: CATEGORY_PERSONAL")
+                        
+                        // Trigger fetch for this filter
+                        Task {
+                            viewModel.fetchAllInboxMessages()
+                        }
+                    } label: { Label("Archive", systemImage: "archivebox.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
+                    
+                    Button { 
+                        // Set up for combined view of TRASH across all accounts
+                        viewModel.selectedAccountFilter = nil // All accounts
+                        viewModel.selectedLabelFilter = "TRASH"
+                        withAnimation { isShowing = false }
+                        print("Selected Filter: All Accounts, Label: TRASH")
+                        
+                        // Trigger fetch for this filter
+                        Task {
+                            viewModel.fetchAllInboxMessages()
+                        }
+                    } label: { Label("Trash", systemImage: "trash.fill") }.buttonStyle(NeumorphicSideMenuItemStyle(isDisclosureGroup: false))
                 }
                 .padding(.horizontal)
                 
@@ -229,7 +338,10 @@ struct SideMenuView: View {
                  .padding(.bottom, 5) // Reduced padding
                  
                  Button {
-                     Task { viewModel.signOut() }
+                     // Wrap async call in a Task and use await
+                     Task {
+                         await viewModel.signOut()
+                     }
                  } label: {
                      Label("Logout", systemImage: "arrow.right.square")
                  }

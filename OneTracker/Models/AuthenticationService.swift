@@ -1,6 +1,9 @@
 import Foundation
-import FirebaseAuth
-import FirebaseCore
+// Remove Firebase imports
+// import FirebaseAuth
+// import FirebaseCore
+import Supabase // Add Supabase
+import Combine // Needed for Cancellable
 import AuthenticationServices
 import CryptoKit
 
@@ -9,59 +12,72 @@ enum AuthError: Error {
     case signInError(message: String)
     case signUpError(message: String)
     case signOutError(message: String)
-    case userNotFound
-    case invalidCredentials
+    case userNotFound // May not be directly applicable, Supabase throws specific errors
+    case invalidCredentials // Supabase errors cover this
+    case resetPasswordError(message: String) // Added for password reset
+    case appleSignInError(message: String) // Specific Apple sign-in error
     case unknown(message: String)
 }
 
-// Authentication service class to handle all Firebase authentication
+// Authentication service class using Supabase
+@MainActor // Ensure @Published properties are updated on the main thread
 class AuthenticationService: NSObject {
     static let shared = AuthenticationService()
     
     // Current nonce for Apple sign-in
     private var currentNonce: String?
     
-    // Authentication state
+    // Authentication state using Supabase User
     @Published var isUserAuthenticated: Bool = false
-    @Published var currentUser: User?
+    @Published var currentUser: User? // Changed from Firebase User to Supabase User
     
-    // Store the auth state listener handle
-    private var authStateHandle: AuthStateDidChangeListenerHandle?
+    // Task handle for the auth state listener
+    private var authStateTask: Task<Void, Never>? // Changed from Cancellable
     
     private override init() {
         super.init()
-        // Listen for auth state changes
-        authStateHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
-            self?.isUserAuthenticated = user != nil
-            self?.currentUser = user
+        // Start listening to auth state changes asynchronously
+        authStateTask = Task {
+            // Use for await to iterate through the stream
+            for await (event, session) in supabase.auth.authStateChanges {
+                print("Auth State Change: Event - \(event), Session Valid: \(session != nil)")
+                // Update published properties (already on MainActor due to class annotation)
+                self.isUserAuthenticated = session != nil
+                self.currentUser = session?.user
+                
+                // Clear skip status if user signs in successfully
+                if session != nil {
+                    self.resetSkipStatus()
+                }
+            }
+             print("Auth State Change listener task finished.") // Should not happen unless stream terminates
         }
     }
     
     deinit {
-        // Remove listener when service is deallocated
-        if let handle = authStateHandle {
-            Auth.auth().removeStateDidChangeListener(handle)
-        }
+        // Cancel the listener task when service is deallocated
+        authStateTask?.cancel()
+        print("AuthenticationService deinit: Cancelled auth state task.")
     }
     
     // MARK: - Email Authentication
     
     func signInWithEmail(email: String, password: String) async throws {
         do {
-            let result = try await Auth.auth().signIn(withEmail: email, password: password)
-            self.currentUser = result.user
-            self.isUserAuthenticated = true
+            let session = try await supabase.auth.signIn(email: email, password: password)
+            print("Sign in successful for \(session.user.email ?? "unknown email")")
         } catch {
+            print("Sign in error: \(error.localizedDescription)") // Corrected print
             throw AuthError.signInError(message: error.localizedDescription)
         }
     }
     
     func signUpWithEmail(email: String, password: String) async throws {
         do {
-            let result = try await Auth.auth().createUser(withEmail: email, password: password)
-            self.currentUser = result.user
-            self.isUserAuthenticated = true
+            let session = try await supabase.auth.signUp(email: email, password: password)
+             print("Sign up successful for \(session.user.email ?? "unknown email") - Confirmation may be required.")
         } catch {
+             print("Sign up error: \(error.localizedDescription)") // Corrected print
             throw AuthError.signUpError(message: error.localizedDescription)
         }
     }
@@ -82,56 +98,54 @@ class AuthenticationService: NSObject {
     
     func signInWithApple(authorization: ASAuthorization) async throws {
         guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential else {
-            throw AuthError.signInError(message: "Unable to retrieve Apple credentials")
+            throw AuthError.appleSignInError(message: "Unable to retrieve Apple credentials")
         }
         
         guard let nonce = currentNonce else {
-            throw AuthError.signInError(message: "Invalid state: A login callback was received, but no login request was sent.")
+            throw AuthError.appleSignInError(message: "Invalid state: A login callback was received, but no login request was sent.")
         }
         
         guard let appleIDToken = appleIDCredential.identityToken else {
-            throw AuthError.signInError(message: "Unable to fetch identity token")
+            throw AuthError.appleSignInError(message: "Unable to fetch identity token")
         }
         
         guard let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
-            throw AuthError.signInError(message: "Unable to serialize token string from data")
+            throw AuthError.appleSignInError(message: "Unable to serialize token string from data")
         }
         
-        // Create Apple credential using the updated API
-        let credential = OAuthProvider.appleCredential(
-            withIDToken: idTokenString,
-            rawNonce: nonce,
-            fullName: appleIDCredential.fullName
-        )
-        
         do {
-            // Sign in with Firebase
-            let result = try await Auth.auth().signIn(with: credential)
-            self.currentUser = result.user
-            self.isUserAuthenticated = true
+            // Corrected call using credentials parameter
+            let session = try await supabase.auth.signInWithIdToken(
+                credentials: .init(provider: .apple, idToken: idTokenString, nonce: nonce)
+            )
+            print("Sign in with Apple successful for \(session.user.email ?? "unknown email")")
             
-            // Update user profile with name if available (usually only on first sign-in)
-            if let fullName = appleIDCredential.fullName, let user = Auth.auth().currentUser {
-                let displayName = "\(fullName.givenName ?? "") \(fullName.familyName ?? "")"
-                if !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    let changeRequest = user.createProfileChangeRequest()
-                    changeRequest.displayName = displayName
-                    try await changeRequest.commitChanges()
-                }
-            }
+            // Handle user metadata (name) if desired and available
+            // This might require an additional call to update user metadata in Supabase
+            // if let fullName = appleIDCredential.fullName {
+            //     let firstName = fullName.givenName ?? ""
+            //     let lastName = fullName.familyName ?? ""
+            //     let displayName = "\(firstName) \(lastName)".trimmingCharacters(in: .whitespacesAndNewlines)
+            //     if !displayName.isEmpty {
+            //         // Example: Update Supabase user metadata (check supabase-swift docs for exact structure)
+            //         // try await supabase.auth.updateUser(metadata: ["full_name": displayName])
+            //         print("Need to implement Supabase user metadata update for name: \(displayName)")
+            //     }
+            // }
         } catch {
-            throw AuthError.signInError(message: error.localizedDescription)
+             print("Sign in with Apple error: \(error.localizedDescription)") // Corrected print
+            throw AuthError.appleSignInError(message: error.localizedDescription)
         }
     }
     
     // MARK: - Sign Out
     
-    func signOut() throws {
+    func signOut() async throws { // Make async as Supabase signOut is async
         do {
-            try Auth.auth().signOut()
-            self.currentUser = nil
-            self.isUserAuthenticated = false
+            try await supabase.auth.signOut()
+             print("Sign out successful")
         } catch {
+             print("Sign out error: \(error.localizedDescription)") // Corrected print
             throw AuthError.signOutError(message: error.localizedDescription)
         }
     }
@@ -142,13 +156,13 @@ class AuthenticationService: NSObject {
         // Set as anonymous or guest user
         UserDefaults.standard.set(true, forKey: "didSkipAuthentication")
         
-        // We'll keep isUserAuthenticated as false since they're not actually authenticated
-        // but the app can check this flag to allow access
+        // Ensure auth state reflects skip
         self.isUserAuthenticated = false
         self.currentUser = nil
         
-        // You can post a notification to inform the UI that the user has skipped auth
+        // We post a notification for UI updates, separate from auth state stream
         NotificationCenter.default.post(name: NSNotification.Name("DidSkipAuthentication"), object: nil)
+        print("Authentication skipped") // Debug log
     }
     
     // Check if user previously skipped authentication
@@ -159,15 +173,19 @@ class AuthenticationService: NSObject {
     // Reset skip status (e.g., when user signs out or when you want to force authentication)
     func resetSkipStatus() {
         UserDefaults.standard.set(false, forKey: "didSkipAuthentication")
+        print("Skip status reset") // Debug log
     }
     
     // MARK: - Password Reset
     
     func resetPassword(for email: String) async throws {
         do {
-            try await Auth.auth().sendPasswordReset(withEmail: email)
+            // Check Supabase documentation for redirect URL requirements/options
+            try await supabase.auth.resetPasswordForEmail(email) // Add redirect URL if needed: , redirectTo: URL(string: "your-app-url-scheme://reset-callback"))
+            print("Password reset email sent to \(email)")
         } catch {
-            throw AuthError.unknown(message: error.localizedDescription)
+            print("Password reset error: \(error.localizedDescription)") // Corrected print
+            throw AuthError.resetPasswordError(message: error.localizedDescription)
         }
     }
     

@@ -1,12 +1,12 @@
 import SwiftUI
-import FirebaseAuth
+// import FirebaseAuth // Remove Firebase import
 
 struct AuthWrapper: View {
     @StateObject var viewModel = UserViewModel()
     // Removed @State private var showAuth - profile is now presented from ContentView header
     
-    // DEVELOPMENT ONLY: Force skip authentication
-    private let forceSkipAuth = true 
+    // Set forceSkipAuth to false to enable the actual AuthView
+    private let forceSkipAuth = false
     
     var body: some View {
         Group {
@@ -21,9 +21,11 @@ struct AuthWrapper: View {
         }
         .onAppear {
             // If not forcing skip, check auth state
-            if !forceSkipAuth {
-                viewModel.isAuthenticated = Auth.auth().currentUser != nil
-            }
+            // The viewModel now handles its own state via the listener
+            // No need to check here directly
+            // if !forceSkipAuth {
+            //     viewModel.isAuthenticated = Auth.auth().currentUser != nil
+            // }
         }
     }
 } 

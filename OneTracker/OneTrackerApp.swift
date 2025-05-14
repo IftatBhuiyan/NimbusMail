@@ -7,18 +7,36 @@
 
 import SwiftUI
 import SwiftData // Re-add SwiftData import
-import FirebaseCore
-import GoogleSignIn // Import GoogleSignIn
+// Remove Firebase imports
+// import FirebaseCore
+// import GoogleSignIn // Keep this if still used for adding accounts, remove if only for Firebase Auth
+import GoogleSignIn // Assuming still needed for adding Google accounts
+import Supabase // Add Supabase import
 
-// Configure Firebase & Google Sign-In
+// Helper function to read Info.plist values
+func infoForKey(_ key: String) -> String? {
+    return (Bundle.main.infoDictionary?[key] as? String)
+}
+
+// Global Supabase client instance
+let supabase: SupabaseClient = {
+    guard let urlString = infoForKey("SupabaseURL"), let url = URL(string: urlString) else {
+        fatalError("SupabaseURL not found or invalid in Info.plist")
+    }
+    guard let key = infoForKey("SupabaseAnonKey") else {
+        fatalError("SupabaseAnonKey not found in Info.plist")
+    }
+    
+    return SupabaseClient(supabaseURL: url, supabaseKey: key)
+}()
+
+// Configure Google Sign-In (if still needed for adding accounts)
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
-        FirebaseApp.configure()
+        // FirebaseApp.configure() // Remove Firebase configuration
         
-        // Remove manual GIDSignIn configuration - SDK reads from Info.plist
-        // guard let clientID = FirebaseApp.app()?.options.clientID else { return true }
-        // GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
+        // Google Sign-In configuration remains if needed for adding accounts
         
         return true
     }
