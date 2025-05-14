@@ -1,6 +1,6 @@
 //
-//  OneTrackerApp.swift
-//  OneTracker
+//  NimbusApp.swift
+//  Nimbus
 //
 //  Created by Iftat Bhuiyan on 4/8/25.
 //
@@ -50,7 +50,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 }
 
 @main
-struct OneTrackerApp: App {
+struct NimbusApp: App {
     // Register app delegate for Firebase setup
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     

@@ -39,7 +39,7 @@ struct SideMenuView: View {
         ScrollView { 
             VStack(alignment: .leading, spacing: 5) { // Reduced overall spacing
                 // 1. Header
-                Text("Lunar Mail")
+                Text("Nimbus")
                     .font(.title).fontWeight(.bold) // Slightly smaller title
                     .foregroundColor(neumorphicTextColor)
                     .padding(.leading)

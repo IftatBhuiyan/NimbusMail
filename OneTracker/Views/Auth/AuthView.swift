@@ -23,20 +23,16 @@ struct AuthView: View {
                     VStack(spacing: 20) { // Reduced spacing from 30 to 20
                         // App Logo / Header (Neumorphic Style)
                         VStack(spacing: 10) {
-                            Image(systemName: "chart.bar.doc.horizontal")
+                            Image(systemName: "cloud.fill")
                                 .resizable()
                                 .scaledToFit()
-                                .frame(width: 80, height: 80)
+                                .frame(width: 100, height: 100)
                                 .foregroundColor(primaryColor)
-                                .padding(20)
-                                .background(
-                                    Circle()
-                                        .fill(neumorphicBackgroundColor)
-                                        .shadow(color: darkDropShadowColor, radius: 5, x: 5, y: 5)
-                                        .shadow(color: lightDropShadowColor, radius: 5, x: -5, y: -5)
-                                )
+                                .shadow(color: darkDropShadowColor, radius: 5, x: 5, y: 5)
+                                .shadow(color: lightDropShadowColor, radius: 5, x: -5, y: -5)
+                                .padding(10)
                             
-                            Text("OneTracker")
+                            Text("Nimbus")
                                 .font(.largeTitle)
                                 .fontWeight(.bold)
                                 .foregroundColor(neumorphicTextColor)
@@ -125,34 +121,24 @@ struct AuthView: View {
                         
                         // Social Sign-in Options
                         VStack(spacing: 15) {
-                            // Apple Sign In (Neumorphic)
-                            AppleSignInButton { result in
-                                switch result {
-                                case .success(let authorization):
-                                    Task {
-                                        await viewModel.signInWithApple(authorization: authorization)
+                            // Apple Sign In/Up (Neumorphic)
+                            AppleSignInButton(
+                                onCompletion: { result in
+                                    switch result {
+                                    case .success(let authorization):
+                                        Task {
+                                            await viewModel.signInWithApple(authorization: authorization)
+                                        }
+                                    case .failure(let error):
+                                        viewModel.errorMessage = error.localizedDescription
                                     }
-                                case .failure(let error):
-                                    viewModel.errorMessage = error.localizedDescription
-                                }
-                            }
+                                },
+                                buttonType: isSignUp ? .signUp : .signIn
+                            )
                             .frame(height: 50)
                             .neumorphicDropShadow()
                             
-                            // Skip Authentication Button
-                            Button(action: {
-                                AuthenticationService.shared.skipAuthentication()
-                                // Notify view model about skipping authentication
-                                Task {
-                                    await viewModel.handleSkipAuthentication()
-                                }
-                            }) {
-                                Text("Skip Sign In")
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.secondary)
-                                    .padding(.vertical, 10)
-                            }
-                            .padding(.top, 0) // Reduced top padding from 5 to 0
+
                         }
                         
                         // Toggle between Sign In and Sign Up
