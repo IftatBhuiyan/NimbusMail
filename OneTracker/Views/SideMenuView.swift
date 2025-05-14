@@ -59,7 +59,7 @@ struct SideMenuView: View {
                         
                         // Explicitly trigger a fetch for all inboxes
                         Task {
-                            await viewModel.fetchAllInboxMessages()
+                            viewModel.fetchAllInboxMessages()
                         }
                     } label: {
                         Label("All Inboxes", systemImage: "tray.and.arrow.down.fill")

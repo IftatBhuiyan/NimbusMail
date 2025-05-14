@@ -340,6 +340,17 @@ struct EmailRowView: View {
     private var decodedSnippet: String {
         return decodeHTMLEntities(email.snippet)
     }
+    
+    // Computed property to get thread count (including this message)
+    private var threadCount: Int {
+        let previousCount = email.previousMessages?.count ?? 0
+        return previousCount + 1
+    }
+    
+    // Computed property to check if email is part of a thread
+    private var isThreaded: Bool {
+        return email.previousMessages != nil && (email.previousMessages?.count ?? 0) > 0
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 15) {
@@ -355,15 +366,37 @@ struct EmailRowView: View {
                         .fontWeight(email.isRead ? .regular : .semibold)
                         .foregroundColor(Color(hex: "0D2750").opacity(0.9))
                     Spacer()
-                    Text(formatDate(email.date))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    
+                    // Date with optional thread count indicator
+                    HStack(spacing: 4) {
+                        if isThreaded {
+                            Text("\(threadCount)")
+                                .font(.caption)
+                                .padding(4)
+                                .background(Color.gray.opacity(0.2))
+                                .cornerRadius(10)
+                        }
+                        Text(formatDate(email.date))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
-                Text(email.subject)
-                    .font(.subheadline)
-                    .fontWeight(email.isRead ? .regular : .semibold)
-                    .foregroundColor(email.isRead ? .secondary : Color(hex: "0D2750").opacity(0.8))
-                    .lineLimit(1)
+                
+                HStack {
+                    Text(email.subject)
+                        .font(.subheadline)
+                        .fontWeight(email.isRead ? .regular : .semibold)
+                        .foregroundColor(email.isRead ? .secondary : Color(hex: "0D2750").opacity(0.8))
+                        .lineLimit(1)
+                    
+                    // Thread indicator
+                    if isThreaded {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                }
+                
                 Text(decodedSnippet)
                     .font(.caption)
                     .foregroundColor(.gray)

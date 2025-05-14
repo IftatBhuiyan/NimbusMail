@@ -42,7 +42,7 @@ struct ProfileView: View {
                             ProfileInfoRow(icon: "lock.shield.fill", label: "Sign-in Provider", value: getProviderName(for: user))
                             
                             let creationDate = user.createdAt
-                            ProfileInfoRow(icon: "calendar", label: "Account Created", value: formattedDate(creationDate))
+                                ProfileInfoRow(icon: "calendar", label: "Account Created", value: formattedDate(creationDate))
                         }
                     }
                     .padding()
@@ -119,7 +119,7 @@ struct ProfileView: View {
         else if let firstIdentity = user.identities?.first {
              // Access non-optional 'provider' directly
              return firstIdentity.provider.capitalized
-        }
+            }
         // Fallback if provider info isn't readily available
         return user.aud // Often 'authenticated'
     }

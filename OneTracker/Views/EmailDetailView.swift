@@ -256,95 +256,154 @@ struct ThreadMessageView: View {
     @State private var replyWebViewHeight: CGFloat = .zero // Height for reply part
     @State private var quotedWebViewHeight: CGFloat = .zero // Height for quoted part
     @State private var isQuotedTextExpanded = false // State for quote expansion
+    
+    // New state for thread message collapse/expand
+    @State private var isThreadExpanded = false // Collapsed by default
+    
+    // Task for cancellation
+    @State private var fetchBodyTask: Task<Void, Never>? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 15) {
-            // Mini Header (similar to original history display)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("From:").font(.caption).foregroundColor(.secondary)
-                    Text(email.senderEmail ?? email.sender).font(.caption).foregroundColor(.gray)
-                    Spacer()
-                    Text(email.date.formatted(date: .numeric, time: .shortened))
-                        .font(.caption2)
-                        .foregroundColor(.gray)
+            // Always visible header section (tappable to expand/collapse)
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isThreadExpanded.toggle()
+                    
+                    // Only load message body when expanded and not already loaded
+                    if isThreadExpanded && replyBody == nil && quotedBody == nil && !isLoadingBody {
+                        loadMessageBody()
+                    }
                 }
-                HStack {
-                    Text("To:").font(.caption).foregroundColor(.secondary)
-                    Text(email.recipient ?? "").font(.caption).foregroundColor(.gray)
-                }
-                // Optionally show Subject if desired
-                 Text(email.subject)
-                     .font(.caption).fontWeight(.medium) // Make subject slightly stand out
-                     .foregroundColor(Color(hex: "0D2750").opacity(0.7))
-                     .padding(.top, 2)
-            }
-            .padding(.bottom, 5)
-
-            // Body Section (fetches and parses content)
-            VStack(alignment: .leading) {
-                if isLoadingBody {
-                    ProgressView().padding().frame(maxWidth: .infinity, alignment: .center)
-                } else if let errorMsg = bodyErrorMessage {
-                    Text("Error: \(errorMsg)").foregroundColor(.red).font(.caption).padding().frame(maxWidth: .infinity, alignment: .center)
-                } else {
-                    // --- Display Reply Part --- 
-                    if let reply = replyBody, !reply.isEmpty {
-                         HTMLWebView(htmlString: reply, dynamicHeight: $replyWebViewHeight)
-                             .frame(height: replyWebViewHeight)
-                    } else if quotedBody == nil {
-                        // If no reply and no quote, show placeholder or empty view
-                        Text("<i>(Empty message body)</i>") // Placeholder
+            }) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        // Expand/collapse indicator
+                        Image(systemName: isThreadExpanded ? "chevron.down" : "chevron.right")
+                            .foregroundColor(.gray)
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                        
+                        Text("From:").font(.caption).foregroundColor(.secondary)
+                        Text(email.senderEmail ?? email.sender).font(.caption).foregroundColor(.gray)
+                        Spacer()
+                        Text(email.date.formatted(date: .numeric, time: .shortened))
+                            .font(.caption2)
+                            .foregroundColor(.gray)
                     }
                     
-                    // --- Display Quoted Part (Expandable) --- 
-                    if let quote = quotedBody {
-                        VStack(alignment: .leading) {
-                            if isQuotedTextExpanded {
-                                // Expanded View: Use HTMLWebView for the quote
-                                HTMLWebView(htmlString: quote, dynamicHeight: $quotedWebViewHeight)
-                                    .frame(height: quotedWebViewHeight)
-                                    .background(Color.clear)
-                                    .padding(.vertical, 10)
-                            } else {
-                                // Collapsed View (Preview): Use Text
-                                HStack {
-                                    Text(quotePreview(quote)) // Use preview helper
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                        .lineLimit(2)
-                                    Spacer()
-                                    Image(systemName: "ellipsis") // Use ellipsis icon
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(10)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
+                    if !isThreadExpanded {
+                        // Preview of subject and snippet when collapsed
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(email.subject)
+                                .font(.caption).fontWeight(.medium)
+                                .foregroundColor(Color(hex: "0D2750").opacity(0.7))
+                                .lineLimit(1)
+                            
+                            // Add snippet preview for better context
+                            Text(email.snippet)
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                                .lineLimit(1)
                         }
-                        .padding(5)
-                        .background(neumorphicBackgroundStyle().opacity(0.6)) // Different background for quote
-                        .onTapGesture {
-                            withAnimation {
-                                isQuotedTextExpanded.toggle()
-                            }
-                        }
-                        .transition(.opacity)
-                        .padding(.top, 10) // Space between reply and quote
+                        .padding(.leading, 18) // Align with content after chevron
                     }
                 }
             }
-            // Body fetch logic
-            .task {
-                // Capture viewModel explicitly for use in async context
-                let capturedViewModel = viewModel 
-                await fetchBodyParts(viewModel: capturedViewModel)
+            .buttonStyle(PlainButtonStyle()) // Remove default button styling
+            
+            // Expandable content section
+            if isThreadExpanded {
+                VStack(alignment: .leading, spacing: 10) {
+                    // Additional header info (only shown when expanded)
+                    HStack {
+                        Text("To:").font(.caption).foregroundColor(.secondary)
+                        Text(email.recipient ?? "").font(.caption).foregroundColor(.gray)
+                    }
+                    .padding(.leading, 18) // Align with content after chevron
+                    
+                    Text(email.subject)
+                        .font(.caption).fontWeight(.medium)
+                        .foregroundColor(Color(hex: "0D2750").opacity(0.7))
+                        .padding(.leading, 18) // Align with content after chevron
+                        .padding(.top, 2)
+                    
+                    // Body Section (fetches and parses content)
+                    VStack(alignment: .leading) {
+                        if isLoadingBody {
+                            ProgressView().padding().frame(maxWidth: .infinity, alignment: .center)
+                        } else if let errorMsg = bodyErrorMessage {
+                            Text("Error: \(errorMsg)").foregroundColor(.red).font(.caption).padding().frame(maxWidth: .infinity, alignment: .center)
+                        } else {
+                            // --- Display Reply Part --- 
+                            if let reply = replyBody, !reply.isEmpty {
+                                 HTMLWebView(htmlString: reply, dynamicHeight: $replyWebViewHeight)
+                                     .frame(height: replyWebViewHeight)
+                            } else if quotedBody == nil {
+                                // If no reply and no quote, show placeholder or empty view
+                                Text("<i>(Empty message body)</i>") // Placeholder
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            // --- Display Quoted Part (Expandable) --- 
+                            if let quote = quotedBody {
+                                VStack(alignment: .leading) {
+                                    if isQuotedTextExpanded {
+                                        // Expanded View: Use HTMLWebView for the quote
+                                        HTMLWebView(htmlString: quote, dynamicHeight: $quotedWebViewHeight)
+                                            .frame(height: quotedWebViewHeight)
+                                            .background(Color.clear)
+                                            .padding(.vertical, 10)
+                                    } else {
+                                        // Collapsed View (Preview): Use Text
+                                        HStack {
+                                            Text(quotePreview(quote)) // Use preview helper
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(2)
+                                            Spacer()
+                                            Image(systemName: "ellipsis") // Use ellipsis icon
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        .padding(10)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                }
+                                .padding(5)
+                                .background(neumorphicBackgroundStyle().opacity(0.6)) // Different background for quote
+                                .onTapGesture {
+                                    withAnimation {
+                                        isQuotedTextExpanded.toggle()
+                                    }
+                                }
+                                .transition(.opacity)
+                                .padding(.top, 10) // Space between reply and quote
+                            }
+                        }
+                    }
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .padding()
         .background(neumorphicBackgroundStyle().opacity(0.8))
+        .contentShape(Rectangle()) // Make the entire area tappable
+        .onDisappear {
+            // Cancel any ongoing fetch when view disappears
+            fetchBodyTask?.cancel()
+        }
+    }
+    
+    // Function to load message body in a cancellable task
+    private func loadMessageBody() {
+        // Cancel any existing task
+        fetchBodyTask?.cancel()
+        
+        // Create a new task
+        fetchBodyTask = Task {
+            await fetchBodyParts(viewModel: viewModel)
+        }
     }
     
     // Function to fetch and parse the email body

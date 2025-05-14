@@ -564,28 +564,27 @@ class UserViewModel: ObservableObject {
             // Sort messages by date (oldest first for building history)
             mappedMessages.sort { $0.date < $1.date }
             
-            // Build the nested structure
-            var latestMessage: EmailDisplayData? = nil
-            var history: [EmailDisplayData] = []
+            if mappedMessages.isEmpty { continue }
             
-            for i in stride(from: mappedMessages.count - 1, through: 0, by: -1) {
-                var currentMessage = mappedMessages[i]
-                if latestMessage == nil { // This is the most recent message
-                    // Set the history built so far
-                    currentMessage.previousMessages = history.isEmpty ? nil : history
-                    latestMessage = currentMessage
-                } else {
-                    // Add the *next* message (which is chronologically later) to the history stack
-                    history.insert(latestMessage!, at: 0) // Prepend to keep order
-                    // Update current message's history pointer
-                    currentMessage.previousMessages = history.isEmpty ? nil : history
-                    latestMessage = currentMessage // Move latest pointer back
-                }
+            // Build the nested structure - all previous messages will be in the history of the most recent one
+            var history: [EmailDisplayData] = []
+            var newestMessage: EmailDisplayData? = nil
+            
+            // Process all but the last message as history
+            for i in 0..<(mappedMessages.count - 1) {
+                history.append(mappedMessages[i])
+            }
+            
+            // Get the most recent message (last in time-sorted array)
+            if let lastMessage = mappedMessages.last {
+                var mostRecentMessage = lastMessage
+                mostRecentMessage.previousMessages = history.isEmpty ? nil : history
+                newestMessage = mostRecentMessage
             }
 
-            // Add the latest message (which now contains the history) to the final list
-            if let rootMessageToShow = latestMessage {
-                structuredEmails.append(rootMessageToShow)
+            // Add the most recent message (which now contains the history) to the final list
+            if let messageToShow = newestMessage {
+                structuredEmails.append(messageToShow)
             }
         }
         
@@ -1352,7 +1351,7 @@ class UserViewModel: ObservableObject {
         if selectedAccountFilter == nil {
             // For "All Inboxes", use fetchAllInboxMessages which handles filtering across all accounts
             print("Filter Fetch: No account selected, fetching emails for All Inboxes")
-            await fetchAllInboxMessages()
+            fetchAllInboxMessages()
             return
         }
         
