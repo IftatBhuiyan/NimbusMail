@@ -44,18 +44,18 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		3B2C5D392DA62829009C50AA /* OneTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OneTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		3B2C5D4D2DA6282B009C50AA /* OneTrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OneTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		3B2C5D572DA6282B009C50AA /* OneTrackerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OneTrackerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3B2C5D392DA62829009C50AA /* Nimbus.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Nimbus.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3B2C5D4D2DA6282B009C50AA /* NimbusTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NimbusTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3B2C5D572DA6282B009C50AA /* NimbusUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NimbusUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		3B2C5D5F2DA6282B009C50AA /* Exceptions for "OneTracker" folder in "OneTracker" target */ = {
+		3B2C5D5F2DA6282B009C50AA /* Exceptions for "OneTracker" folder in "Nimbus" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = 3B2C5D382DA62829009C50AA /* OneTracker */;
+			target = 3B2C5D382DA62829009C50AA /* Nimbus */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -63,7 +63,7 @@
 		3B2C5D3B2DA62829009C50AA /* OneTracker */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				3B2C5D5F2DA6282B009C50AA /* Exceptions for "OneTracker" folder in "OneTracker" target */,
+				3B2C5D5F2DA6282B009C50AA /* Exceptions for "OneTracker" folder in "Nimbus" target */,
 			);
 			path = OneTracker;
 			sourceTree = "<group>";
@@ -136,9 +136,9 @@
 		3B2C5D3A2DA62829009C50AA /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				3B2C5D392DA62829009C50AA /* OneTracker.app */,
-				3B2C5D4D2DA6282B009C50AA /* OneTrackerTests.xctest */,
-				3B2C5D572DA6282B009C50AA /* OneTrackerUITests.xctest */,
+				3B2C5D392DA62829009C50AA /* Nimbus.app */,
+				3B2C5D4D2DA6282B009C50AA /* NimbusTests.xctest */,
+				3B2C5D572DA6282B009C50AA /* NimbusUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -153,9 +153,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		3B2C5D382DA62829009C50AA /* OneTracker */ = {
+		3B2C5D382DA62829009C50AA /* Nimbus */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 3B2C5D602DA6282B009C50AA /* Build configuration list for PBXNativeTarget "OneTracker" */;
+			buildConfigurationList = 3B2C5D602DA6282B009C50AA /* Build configuration list for PBXNativeTarget "Nimbus" */;
 			buildPhases = (
 				3B2C5D352DA62829009C50AA /* Sources */,
 				3B2C5D362DA62829009C50AA /* Frameworks */,
@@ -168,7 +168,7 @@
 			fileSystemSynchronizedGroups = (
 				3B2C5D3B2DA62829009C50AA /* OneTracker */,
 			);
-			name = OneTracker;
+			name = Nimbus;
 			packageProductDependencies = (
 				3BCFF2A32DA9A3A500B8DA78 /* FirebaseAnalytics */,
 				3BCFF2A52DA9A3A500B8DA78 /* FirebaseAuth */,
@@ -189,12 +189,12 @@
 				3BFC1FA02DB72CBB00EC2063 /* Supabase */,
 			);
 			productName = OneTracker;
-			productReference = 3B2C5D392DA62829009C50AA /* OneTracker.app */;
+			productReference = 3B2C5D392DA62829009C50AA /* Nimbus.app */;
 			productType = "com.apple.product-type.application";
 		};
-		3B2C5D4C2DA6282B009C50AA /* OneTrackerTests */ = {
+		3B2C5D4C2DA6282B009C50AA /* NimbusTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 3B2C5D652DA6282B009C50AA /* Build configuration list for PBXNativeTarget "OneTrackerTests" */;
+			buildConfigurationList = 3B2C5D652DA6282B009C50AA /* Build configuration list for PBXNativeTarget "NimbusTests" */;
 			buildPhases = (
 				3B2C5D492DA6282B009C50AA /* Sources */,
 				3B2C5D4A2DA6282B009C50AA /* Frameworks */,
@@ -208,16 +208,16 @@
 			fileSystemSynchronizedGroups = (
 				3B2C5D502DA6282B009C50AA /* OneTrackerTests */,
 			);
-			name = OneTrackerTests;
+			name = NimbusTests;
 			packageProductDependencies = (
 			);
 			productName = OneTrackerTests;
-			productReference = 3B2C5D4D2DA6282B009C50AA /* OneTrackerTests.xctest */;
+			productReference = 3B2C5D4D2DA6282B009C50AA /* NimbusTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		3B2C5D562DA6282B009C50AA /* OneTrackerUITests */ = {
+		3B2C5D562DA6282B009C50AA /* NimbusUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 3B2C5D682DA6282B009C50AA /* Build configuration list for PBXNativeTarget "OneTrackerUITests" */;
+			buildConfigurationList = 3B2C5D682DA6282B009C50AA /* Build configuration list for PBXNativeTarget "NimbusUITests" */;
 			buildPhases = (
 				3B2C5D532DA6282B009C50AA /* Sources */,
 				3B2C5D542DA6282B009C50AA /* Frameworks */,
@@ -231,11 +231,11 @@
 			fileSystemSynchronizedGroups = (
 				3B2C5D5A2DA6282B009C50AA /* OneTrackerUITests */,
 			);
-			name = OneTrackerUITests;
+			name = NimbusUITests;
 			packageProductDependencies = (
 			);
 			productName = OneTrackerUITests;
-			productReference = 3B2C5D572DA6282B009C50AA /* OneTrackerUITests.xctest */;
+			productReference = 3B2C5D572DA6282B009C50AA /* NimbusUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -261,7 +261,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 3B2C5D342DA62829009C50AA /* Build configuration list for PBXProject "OneTracker" */;
+			buildConfigurationList = 3B2C5D342DA62829009C50AA /* Build configuration list for PBXProject "Nimbus" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -281,9 +281,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				3B2C5D382DA62829009C50AA /* OneTracker */,
-				3B2C5D4C2DA6282B009C50AA /* OneTrackerTests */,
-				3B2C5D562DA6282B009C50AA /* OneTrackerUITests */,
+				3B2C5D382DA62829009C50AA /* Nimbus */,
+				3B2C5D4C2DA6282B009C50AA /* NimbusTests */,
+				3B2C5D562DA6282B009C50AA /* NimbusUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -339,12 +339,12 @@
 /* Begin PBXTargetDependency section */
 		3B2C5D4F2DA6282B009C50AA /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 3B2C5D382DA62829009C50AA /* OneTracker */;
+			target = 3B2C5D382DA62829009C50AA /* Nimbus */;
 			targetProxy = 3B2C5D4E2DA6282B009C50AA /* PBXContainerItemProxy */;
 		};
 		3B2C5D592DA6282B009C50AA /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 3B2C5D382DA62829009C50AA /* OneTracker */;
+			target = 3B2C5D382DA62829009C50AA /* Nimbus */;
 			targetProxy = 3B2C5D582DA6282B009C50AA /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -556,7 +556,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/OneTracker.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/OneTracker";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Nimbus.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Nimbus";
 			};
 			name = Debug;
 		};
@@ -575,7 +575,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/OneTracker.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/OneTracker";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Nimbus.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Nimbus";
 			};
 			name = Release;
 		};
@@ -616,7 +616,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		3B2C5D342DA62829009C50AA /* Build configuration list for PBXProject "OneTracker" */ = {
+		3B2C5D342DA62829009C50AA /* Build configuration list for PBXProject "Nimbus" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				3B2C5D632DA6282B009C50AA /* Debug */,
@@ -625,7 +625,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		3B2C5D602DA6282B009C50AA /* Build configuration list for PBXNativeTarget "OneTracker" */ = {
+		3B2C5D602DA6282B009C50AA /* Build configuration list for PBXNativeTarget "Nimbus" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				3B2C5D612DA6282B009C50AA /* Debug */,
@@ -634,7 +634,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		3B2C5D652DA6282B009C50AA /* Build configuration list for PBXNativeTarget "OneTrackerTests" */ = {
+		3B2C5D652DA6282B009C50AA /* Build configuration list for PBXNativeTarget "NimbusTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				3B2C5D662DA6282B009C50AA /* Debug */,
@@ -643,7 +643,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		3B2C5D682DA6282B009C50AA /* Build configuration list for PBXNativeTarget "OneTrackerUITests" */ = {
+		3B2C5D682DA6282B009C50AA /* Build configuration list for PBXNativeTarget "NimbusUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				3B2C5D692DA6282B009C50AA /* Debug */,

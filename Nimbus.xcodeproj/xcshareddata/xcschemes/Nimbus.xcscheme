@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "3B2C5D382DA62829009C50AA"
-               BuildableName = "OneTracker.app"
-               BlueprintName = "OneTracker"
-               ReferencedContainer = "container:OneTracker.xcodeproj">
+               BuildableName = "Nimbus.app"
+               BlueprintName = "Nimbus"
+               ReferencedContainer = "container:Nimbus.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -41,9 +41,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "3B2C5D4C2DA6282B009C50AA"
-               BuildableName = "OneTrackerTests.xctest"
-               BlueprintName = "OneTrackerTests"
-               ReferencedContainer = "container:OneTracker.xcodeproj">
+               BuildableName = "NimbusTests.xctest"
+               BlueprintName = "NimbusTests"
+               ReferencedContainer = "container:Nimbus.xcodeproj">
             </BuildableReference>
          </TestableReference>
          <TestableReference
@@ -52,9 +52,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "3B2C5D562DA6282B009C50AA"
-               BuildableName = "OneTrackerUITests.xctest"
-               BlueprintName = "OneTrackerUITests"
-               ReferencedContainer = "container:OneTracker.xcodeproj">
+               BuildableName = "NimbusUITests.xctest"
+               BlueprintName = "NimbusUITests"
+               ReferencedContainer = "container:Nimbus.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -74,9 +74,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "3B2C5D382DA62829009C50AA"
-            BuildableName = "OneTracker.app"
-            BlueprintName = "OneTracker"
-            ReferencedContainer = "container:OneTracker.xcodeproj">
+            BuildableName = "Nimbus.app"
+            BlueprintName = "Nimbus"
+            ReferencedContainer = "container:Nimbus.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -91,9 +91,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "3B2C5D382DA62829009C50AA"
-            BuildableName = "OneTracker.app"
-            BlueprintName = "OneTracker"
-            ReferencedContainer = "container:OneTracker.xcodeproj">
+            BuildableName = "Nimbus.app"
+            BlueprintName = "Nimbus"
+            ReferencedContainer = "container:Nimbus.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
