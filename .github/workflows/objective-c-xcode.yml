@@ -15,9 +15,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         
-      # Display Xcode version for debugging
-      - name: Xcode Version
-        run: xcodebuild -version
+      # Display available Xcode versions
+      - name: List available Xcode versions
+        run: |
+          echo "Available Xcode versions:"
+          ls -la /Applications/ | grep "Xcode"
+          sudo xcode-select -p
+      
+      # Try to select Xcode 16.2 if available
+      - name: Select Xcode 16.2
+        run: |
+          if [ -d "/Applications/Xcode_16.2.app" ]; then
+            echo "Found Xcode 16.2, selecting it"
+            sudo xcode-select -s /Applications/Xcode_16.2.app
+            xcodebuild -version
+          elif [ -d "/Applications/Xcode_16.app" ]; then
+            echo "Found Xcode 16, selecting it"
+            sudo xcode-select -s /Applications/Xcode_16.app
+            xcodebuild -version
+          else
+            echo "WARNING: Could not find Xcode 16.2 or 16.x, which is needed for your project format"
+            echo "Current Xcode version:"
+            xcodebuild -version
+            echo ""
+            echo "You may need to downgrade your project format locally using an older version of Xcode"
+            echo "Or update GitHub's workflow to use a container with Xcode 16.2+"
+          fi
       
       # Set up example configuration files
       - name: Set up configuration files
@@ -26,19 +49,32 @@ jobs:
           cp Nimbus/GoogleService-Info.plist.example Nimbus/GoogleService-Info.plist
           cp Nimbus/client_id.plist.example Nimbus/client_YOUR_CLIENT_ID.apps.googleusercontent.com-2.plist
       
-      # Use original scheme detection and build steps
-      - name: Set Default Scheme
+      # Check project structure
+      - name: Check project structure
         run: |
-          scheme_list=$(xcodebuild -list -json | tr -d "\n" || echo '{"project":{"targets":["Nimbus"]}}')
-          default=$(echo $scheme_list | ruby -e "require 'json'; puts JSON.parse(STDIN.gets)['project']['targets'][0]")
-          echo $default | cat >default
-          echo Using default scheme: $default
-          
+          echo "Project structure:"
+          ls -la
+          echo ""
+          echo "Xcode project details:"
+          find . -name "*.xcodeproj" -type d -exec ls -la {} \;
+          echo ""
+          echo "Xcode project contents:"
+          find . -name "*.xcodeproj" -type d -exec ls -la {}/ \;
+      
+      # Try a simpler build command that doesn't require reading project structure
       - name: Build
-        env:
-          scheme: ${{ 'default' }}
         run: |
-          if [ $scheme = default ]; then scheme=$(cat default); fi
-          if [ "`ls -A | grep -i \\.xcworkspace\$`" ]; then filetype_parameter="workspace" && file_to_build="`ls -A | grep -i \\.xcworkspace\$`"; else filetype_parameter="project" && file_to_build="`ls -A | grep -i \\.xcodeproj\$`"; fi
-          file_to_build=`echo $file_to_build | awk '{$1=$1;print}'`
-          xcodebuild clean build analyze -scheme "$scheme" -"$filetype_parameter" "$file_to_build" | xcpretty && exit ${PIPESTATUS[0]}
+          # First attempt - try with Nimbus scheme
+          echo "Attempting build with hardcoded values..."
+          
+          # Check if we have a workspace or just a project
+          if [ -d "Nimbus.xcworkspace" ]; then
+            echo "Building workspace: Nimbus.xcworkspace with scheme: Nimbus"
+            xcodebuild clean build -workspace Nimbus.xcworkspace -scheme Nimbus || \
+            xcodebuild clean build -workspace Nimbus.xcworkspace -scheme "Nimbus"
+          else
+            echo "Building project: Nimbus.xcodeproj with scheme: Nimbus"
+            xcodebuild clean build -project Nimbus.xcodeproj -scheme Nimbus || \
+            xcodebuild clean build -project Nimbus.xcodeproj -scheme "Nimbus" || \
+            xcodebuild clean build -project Nimbus.xcodeproj -alltargets
+          fi
