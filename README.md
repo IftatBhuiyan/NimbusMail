@@ -2,6 +2,16 @@
 
 Nimbus is a modern email client for iOS that unifies multiple email accounts in one beautiful interface. Connect your Gmail, Office365, Yahoo, AOL, and other email accounts to manage all your communications in one place.
 
+<img src="images/sc4.jpeg" alt="Nimbus App Icon" width="100" align="right">
+
+## Screenshots
+
+<p align="center">
+  <img src="images/sc1.jpeg" alt="Nimbus Screenshot 1" width="250">
+  <img src="images/sc2.jpeg" alt="Nimbus Screenshot 2" width="250">
+  <img src="images/sc3.jpeg" alt="Nimbus Screenshot 3" width="250">
+</p>
+
 ## Features
 
 - 📧 **Unified Inbox**: Manage all your email accounts in one place
