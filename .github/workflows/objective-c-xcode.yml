@@ -9,65 +9,36 @@ on:
 jobs:
   build:
     name: Build and analyse default scheme using xcodebuild command
-    runs-on: macos-latest
+    runs-on: macos-14 # Specifically use macOS 14 for newer Xcode
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         
-      - name: Debug Project Structure
-        run: |
-          echo "-- Listing repository contents --"
-          ls -la
-          echo ""
-          echo "-- Finding Xcode projects --"
-          find . -name "*.xcodeproj" -ls
-          echo ""
-          
-      - name: Check Xcode version
-        run: |
-          xcodebuild -version
-          xcode-select -p
-        
+      # Display Xcode version for debugging
+      - name: Xcode Version
+        run: xcodebuild -version
+      
+      # Set up example configuration files
       - name: Set up configuration files
         run: |
           cp Nimbus/Info.plist.example Nimbus/Info.plist
           cp Nimbus/GoogleService-Info.plist.example Nimbus/GoogleService-Info.plist
           cp Nimbus/client_id.plist.example Nimbus/client_YOUR_CLIENT_ID.apps.googleusercontent.com-2.plist
-          
-      - name: Update placeholder values
+      
+      # Use original scheme detection and build steps
+      - name: Set Default Scheme
         run: |
-          sed -i '' 's/YOUR_SUPABASE_URL/https:\/\/example.supabase.co/g' Nimbus/Info.plist
-          sed -i '' 's/YOUR_SUPABASE_ANON_KEY/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example/g' Nimbus/Info.plist
-          sed -i '' 's/YOUR_FIREBASE_API_KEY/FAKE_API_KEY_FOR_CI_ONLY/g' Nimbus/GoogleService-Info.plist
-          sed -i '' 's/com.YourCompany.NimbusMail/com.github.ci.NimbusMail/g' Nimbus/GoogleService-Info.plist
-          sed -i '' 's/YOUR_CLIENT_ID/123456789012-exampleclientid/g' Nimbus/client_YOUR_CLIENT_ID.apps.googleusercontent.com-2.plist
-        
-      - name: Set Fixed Scheme
-        run: |
-          echo "Using Nimbus scheme"
-          echo "Nimbus" > default
+          scheme_list=$(xcodebuild -list -json | tr -d "\n" || echo '{"project":{"targets":["Nimbus"]}}')
+          default=$(echo $scheme_list | ruby -e "require 'json'; puts JSON.parse(STDIN.gets)['project']['targets'][0]")
+          echo $default | cat >default
+          echo Using default scheme: $default
           
-      - name: List available schemes
-        continue-on-error: true
-        run: |
-          echo "-- Available schemes in project --"
-          xcodebuild -list || echo "Failed to list schemes"
-          echo ""
-          echo "-- Project directory contents --"
-          find Nimbus.xcodeproj -type f | sort
-          echo ""
-          
-      - name: Build Project
+      - name: Build
         env:
-          scheme: Nimbus
+          scheme: ${{ 'default' }}
         run: |
-          # Determine if we have a workspace or just a project
-          if [ -d "Nimbus.xcworkspace" ]; then
-            echo "Building workspace: Nimbus.xcworkspace"
-            xcodebuild clean build -workspace Nimbus.xcworkspace -scheme "$scheme" -destination 'platform=iOS Simulator,name=iPhone 14 Pro,OS=latest' | xcpretty
-          else
-            echo "Building project: Nimbus.xcodeproj"
-            xcodebuild clean build -project Nimbus.xcodeproj -scheme "$scheme" -destination 'platform=iOS Simulator,name=iPhone 14 Pro,OS=latest' | xcpretty
-          fi
-          exit ${PIPESTATUS[0]}
+          if [ $scheme = default ]; then scheme=$(cat default); fi
+          if [ "`ls -A | grep -i \\.xcworkspace\$`" ]; then filetype_parameter="workspace" && file_to_build="`ls -A | grep -i \\.xcworkspace\$`"; else filetype_parameter="project" && file_to_build="`ls -A | grep -i \\.xcodeproj\$`"; fi
+          file_to_build=`echo $file_to_build | awk '{$1=$1;print}'`
+          xcodebuild clean build analyze -scheme "$scheme" -"$filetype_parameter" "$file_to_build" | xcpretty && exit ${PIPESTATUS[0]}
