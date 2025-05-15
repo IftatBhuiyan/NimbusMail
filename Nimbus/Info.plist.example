@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+        <key>CFBundleURLTypes</key>
+        <array>
+                <dict>
+                        <key>CFBundleURLName</key>
+                        <string>com.EclipseStudio.NimbusMail</string>
+                        <key>CFBundleURLSchemes</key>
+                        <array>
+                                <string>Nimbus</string>
+                        </array>
+                </dict>
+                <dict>
+                        <key>CFBundleTypeRole</key>
+                        <string>Editor</string>
+                        <key>CFBundleURLSchemes</key>
+                        <array>
+                                <string>com.googleusercontent.apps.YOUR_GOOGLE_CLIENT_ID_WITHOUT_DOMAIN</string>
+                        </array>
+                </dict>
+        </array>
+        <key>FirebaseAppDelegateProxyEnabled</key>
+        <false/>
+        <key>GIDClientID</key>
+        <string>YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com</string>
+        <key>NSAppTransportSecurity</key>
+        <dict>
+                <key>NSAllowsArbitraryLoads</key>
+                <true/>
+        </dict>
+        <key>SupabaseAnonKey</key>
+        <string>YOUR_SUPABASE_ANON_KEY</string>
+        <key>SupabaseURL</key>
+        <string>YOUR_SUPABASE_URL</string>
+        <key>UIApplicationSceneManifest</key>
+        <dict>
+                <key>UIApplicationSupportsMultipleScenes</key>
+                <false/>
+                <key>UISceneConfigurations</key>
+                <dict>
+                        <key>UIWindowSceneSessionRoleApplication</key>
+                        <array>
+                                <dict>
+                                        <key>UISceneConfigurationName</key>
+                                        <string>Default Configuration</string>
+                                        <key>UISceneDelegateClassName</key>
+                                        <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+                                </dict>
+                        </array>
+                </dict>
+        </dict>
+        <key>UIBackgroundModes</key>
+        <array>
+                <string>remote-notification</string>
+                <string>fetch</string>
+                <string>external-accessory</string>
+                <string>processing</string>
+        </array>
+</dict>
+</plist> 
