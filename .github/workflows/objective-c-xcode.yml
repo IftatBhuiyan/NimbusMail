@@ -65,16 +65,16 @@ jobs:
       - name: Build
         run: |
           # First attempt - try with Nimbus scheme
-          echo "Attempting build with hardcoded values..."
+          echo "Attempting build with hardcoded values and skipping code signing..."
           
           # Check if we have a workspace or just a project
           if [ -d "Nimbus.xcworkspace" ]; then
             echo "Building workspace: Nimbus.xcworkspace with scheme: Nimbus"
-            xcodebuild clean build -workspace Nimbus.xcworkspace -scheme Nimbus || \
-            xcodebuild clean build -workspace Nimbus.xcworkspace -scheme "Nimbus"
+            xcodebuild clean build -workspace Nimbus.xcworkspace -scheme Nimbus CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=NO || \
+            xcodebuild clean build -workspace Nimbus.xcworkspace -scheme "Nimbus" CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=NO
           else
             echo "Building project: Nimbus.xcodeproj with scheme: Nimbus"
-            xcodebuild clean build -project Nimbus.xcodeproj -scheme Nimbus || \
-            xcodebuild clean build -project Nimbus.xcodeproj -scheme "Nimbus" || \
-            xcodebuild clean build -project Nimbus.xcodeproj -alltargets
+            xcodebuild clean build -project Nimbus.xcodeproj -scheme Nimbus CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=NO || \
+            xcodebuild clean build -project Nimbus.xcodeproj -scheme "Nimbus" CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=NO || \
+            xcodebuild clean build -project Nimbus.xcodeproj -alltargets CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=NO
           fi
