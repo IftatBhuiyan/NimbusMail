@@ -1,13 +1,13 @@
 //
-//  OneTrackerUITestsLaunchTests.swift
-//  OneTrackerUITests
+//  NimbusUITestsLaunchTests.swift
+//  NimbusUITests
 //
 //  Created by Iftat Bhuiyan on 4/8/25.
 //
 
 import XCTest
 
-final class OneTrackerUITestsLaunchTests: XCTestCase {
+final class NimbusUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true

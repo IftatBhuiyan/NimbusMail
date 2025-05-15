@@ -50,7 +50,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		3B2C5D5F2DA6282B009C50AA /* Exceptions for "OneTracker" folder in "Nimbus" target */ = {
+		3B2C5D5F2DA6282B009C50AA /* Exceptions for "Nimbus" folder in "Nimbus" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -60,22 +60,22 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		3B2C5D3B2DA62829009C50AA /* OneTracker */ = {
+		3B2C5D3B2DA62829009C50AA /* Nimbus */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				3B2C5D5F2DA6282B009C50AA /* Exceptions for "OneTracker" folder in "Nimbus" target */,
+				3B2C5D5F2DA6282B009C50AA /* Exceptions for "Nimbus" folder in "Nimbus" target */,
 			);
-			path = OneTracker;
+			path = Nimbus;
 			sourceTree = "<group>";
 		};
-		3B2C5D502DA6282B009C50AA /* OneTrackerTests */ = {
+		3B2C5D502DA6282B009C50AA /* NimbusTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = OneTrackerTests;
+			path = NimbusTests;
 			sourceTree = "<group>";
 		};
-		3B2C5D5A2DA6282B009C50AA /* OneTrackerUITests */ = {
+		3B2C5D5A2DA6282B009C50AA /* NimbusUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = OneTrackerUITests;
+			path = NimbusUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -125,9 +125,9 @@
 		3B2C5D302DA62829009C50AA = {
 			isa = PBXGroup;
 			children = (
-				3B2C5D3B2DA62829009C50AA /* OneTracker */,
-				3B2C5D502DA6282B009C50AA /* OneTrackerTests */,
-				3B2C5D5A2DA6282B009C50AA /* OneTrackerUITests */,
+				3B2C5D3B2DA62829009C50AA /* Nimbus */,
+				3B2C5D502DA6282B009C50AA /* NimbusTests */,
+				3B2C5D5A2DA6282B009C50AA /* NimbusUITests */,
 				3BCFF3972DAC9F6D00B8DA78 /* Frameworks */,
 				3B2C5D3A2DA62829009C50AA /* Products */,
 			);
@@ -166,7 +166,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				3B2C5D3B2DA62829009C50AA /* OneTracker */,
+				3B2C5D3B2DA62829009C50AA /* Nimbus */,
 			);
 			name = Nimbus;
 			packageProductDependencies = (
@@ -206,7 +206,7 @@
 				3B2C5D4F2DA6282B009C50AA /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				3B2C5D502DA6282B009C50AA /* OneTrackerTests */,
+				3B2C5D502DA6282B009C50AA /* NimbusTests */,
 			);
 			name = NimbusTests;
 			packageProductDependencies = (
@@ -229,7 +229,7 @@
 				3B2C5D592DA6282B009C50AA /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				3B2C5D5A2DA6282B009C50AA /* OneTrackerUITests */,
+				3B2C5D5A2DA6282B009C50AA /* NimbusUITests */,
 			);
 			name = NimbusUITests;
 			packageProductDependencies = (
@@ -356,14 +356,14 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
-				CODE_SIGN_ENTITLEMENTS = OneTracker/OneTracker.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Nimbus/Nimbus.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"OneTracker/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"Nimbus/Preview Content\"";
 				DEVELOPMENT_TEAM = K794F89ADB;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = OneTracker/Info.plist;
+				INFOPLIST_FILE = Nimbus/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Nimbus Mail";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -392,14 +392,14 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
-				CODE_SIGN_ENTITLEMENTS = OneTracker/OneTracker.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Nimbus/Nimbus.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"OneTracker/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"Nimbus/Preview Content\"";
 				DEVELOPMENT_TEAM = K794F89ADB;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = OneTracker/Info.plist;
+				INFOPLIST_FILE = Nimbus/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Nimbus Mail";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

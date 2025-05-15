@@ -6,12 +6,9 @@
 //
 
 import SwiftUI
-import SwiftData // Re-add SwiftData import
-// Remove Firebase imports
-// import FirebaseCore
-// import GoogleSignIn // Keep this if still used for adding accounts, remove if only for Firebase Auth
-import GoogleSignIn // Assuming still needed for adding Google accounts
-import Supabase // Add Supabase import
+import SwiftData
+import GoogleSignIn
+import Supabase
 
 // Helper function to read Info.plist values
 func infoForKey(_ key: String) -> String? {
@@ -34,7 +31,6 @@ let supabase: SupabaseClient = {
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
-        // FirebaseApp.configure() // Remove Firebase configuration
         
         // Google Sign-In configuration remains if needed for adding accounts
         

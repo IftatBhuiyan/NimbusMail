@@ -1,13 +1,13 @@
 //
-//  OneTrackerUITests.swift
-//  OneTrackerUITests
+//  NimbusUITests.swift
+//  NimbusUITests
 //
 //  Created by Iftat Bhuiyan on 4/8/25.
 //
 
 import XCTest
 
-final class OneTrackerUITests: XCTestCase {
+final class NimbusTests: XCTestCase {
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
