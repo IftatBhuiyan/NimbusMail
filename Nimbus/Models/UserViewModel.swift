@@ -5,9 +5,13 @@ import AuthenticationServices
 import SwiftUI
 import GoogleSignIn
 import GoogleAPIClientForREST_Gmail
+import SwiftData
 
 @MainActor
 class UserViewModel: ObservableObject {
+    // SwiftData ModelContext
+    private var modelContext: ModelContext?
+
     // Published properties
     @Published var isAuthenticated = false
     @Published var userEmail: String?
@@ -114,7 +118,10 @@ class UserViewModel: ObservableObject {
                 self.userName = supabaseUser?.userMetadata["full_name"] as? String ?? supabaseUser?.userMetadata["name"] as? String
                 print("ViewModel Updated: Email=\(self.userEmail ?? "nil"), Name=\(self.userName ?? "nil")")
                 
-                if supabaseUser != nil {
+                if let supabaseUser = supabaseUser {
+                    // Save last used userId/email for offline use
+                    UserDefaults.standard.set(supabaseUser.id.uuidString, forKey: self.lastUsedUserIdKey)
+                    UserDefaults.standard.set(supabaseUser.email, forKey: self.lastUsedUserEmailKey)
                     print("User logged in, loading accounts...")
                     Task {
                         await self.loadAccounts()
@@ -139,6 +146,9 @@ class UserViewModel: ObservableObject {
         // Initial load/fetch is now handled by the sink above when the first auth state is received
         // loadAccounts() 
         // fetchAllInboxMessages()
+
+        // Always load from SwiftData on init
+        Task { await self.loadAccountsFromSwiftDataOfflineFallback() }
     }
     
     // Initializer for Previews & Testing
@@ -522,7 +532,9 @@ class UserViewModel: ObservableObject {
             print("Attempting to upsert \(allSupabaseEmails.count) emails to Supabase...")
             do {
                 _ = try await supabase.from("emails").upsert(allSupabaseEmails).execute()
-                print("Successfully upserted emails.")
+                print("Successfully upserted emails to Supabase.")
+                // ADD: Save to SwiftData after upsert
+                await saveEmailsToSwiftData(supabaseEmails: allSupabaseEmails, for: userId)
             } catch {
                 print("Error upserting emails to Supabase: \(error.localizedDescription)")
             }
@@ -545,7 +557,7 @@ class UserViewModel: ObservableObject {
     private func fetchThreadsForAccountAsync(account: EmailAccount, labelIds: [String]? = nil, searchQuery: String? = nil, pageToken: String? = nil) async -> Result<([GTLRGmail_Thread], String?), Error> {
         await withCheckedContinuation { continuation in
             // Pass parameters to the service
-            GmailAPIService.shared.fetchInboxThreads(for: account, labelIds: labelIds, searchQuery: searchQuery, pageToken: pageToken, maxTotalThreads: 50) { result in // Limit threads per account
+            GmailAPIService.shared.fetchInboxThreads(for: account, labelIds: labelIds, searchQuery: searchQuery, pageToken: pageToken, maxTotalThreads: 50) { result in
                 continuation.resume(returning: result)
             }
         }
@@ -741,14 +753,19 @@ class UserViewModel: ObservableObject {
         )
         
         // Create Email-Label Links
-        let labelLinks = (gtlrMessage.labelIds ?? []).map {
+        let actualLabelIds = gtlrMessage.labelIds ?? []
+        let labelLinks = actualLabelIds.map {
             SupabaseEmailLabelLink(userId: userId,
                                    accountEmail: accountEmail, 
                                    providerMessageId: providerMessageId, 
                                    providerLabelId: $0)
         }
         
-        return (supabaseEmail, labelLinks)
+        // Assign labelIds to the supabaseEmail object for transient use
+        var mutableSupabaseEmail = supabaseEmail
+        mutableSupabaseEmail.labelIds = actualLabelIds
+        
+        return (mutableSupabaseEmail, labelLinks)
     }
     // --- End DB Mapping Helper --- 
 
@@ -962,7 +979,7 @@ class UserViewModel: ObservableObject {
         if inboxEmails.firstIndex(where: { $0.id == item.id }) == thresholdIndex {
             
             // Determine the account key to check for page token
-            // Use selectedAccountFilter if set, otherwise maybe handle "All Inboxes" differently?
+            // Use selectedAccountFilter if set, otherwise handle "All Inboxes" differently?
             // For now, pagination primarily works when a single account is selected.
             guard let accountKey = selectedAccountFilter else {
                  print("Pagination: Currently only supported when a single account is selected.")
@@ -1416,7 +1433,7 @@ class UserViewModel: ObservableObject {
     // --- Add the new private functions here ---
     @MainActor
     private func loadLabelsFromDatabase(for userId: UUID) async {
-        print("Attempting to load labels from database for user: \(userId)")
+        print("Attempting to load labels from Supabase for user: \(userId)")
         do {
             let storedLabels: [SupabaseLabel] = try await supabase
                 .from("labels")
@@ -1436,17 +1453,17 @@ class UserViewModel: ObservableObject {
             }
 
             self.labelsByAccount = labelsGrouped
-            print("Successfully loaded \(storedLabels.count) labels from database into UI state.")
+            print("Successfully loaded \(storedLabels.count) labels from Supabase into UI state.")
 
         } catch {
-            print("Error loading labels from database: \(error.localizedDescription)")
+            print("Error loading labels from Supabase: \(error.localizedDescription)")
             self.errorMessage = "Failed to load label cache: \(error.localizedDescription)"
         }
     }
 
     @MainActor
     private func loadEmailsFromDatabase(for userId: UUID) async {
-        print("Attempting to load emails from database for user: \(userId)")
+        print("Attempting to load emails from Supabase for user: \(userId)")
         do {
             let storedEmails: [SupabaseEmail] = try await supabase
                 .from("emails")
@@ -1459,7 +1476,7 @@ class UserViewModel: ObservableObject {
                 
             // Early exit if no emails cached    
             guard !storedEmails.isEmpty else {
-                 print("No cached emails found in database.")
+                 print("No cached emails found in Supabase.")
                  self.emailsByAccount = [:] // Ensure UI state is cleared
                  return
             }
@@ -1507,13 +1524,416 @@ class UserViewModel: ObservableObject {
             // }
 
             self.emailsByAccount = emailsGrouped
-            print("Successfully loaded \(storedEmails.count) emails from database into UI state.")
+            print("Successfully loaded \(storedEmails.count) emails from Supabase into UI state.")
 
         } catch {
-            print("Error loading emails from database: \(error.localizedDescription)")
+            print("Error loading emails from Supabase: \(error.localizedDescription)")
             self.errorMessage = "Failed to load email cache: \(error.localizedDescription)"
             self.emailsByAccount = [:] // Clear cache on error
         }
     }
     // --- End new private functions ---
-} 
+
+    // --- SwiftData Setup ---
+    func setupModelContext(_ context: ModelContext) {
+        self.modelContext = context
+        // Always load from SwiftData after context is set
+        Task { await self.loadAccountsFromSwiftDataOfflineFallback() }
+    }
+    
+    // --- End SwiftData Setup ---
+
+    private func setupAuthCancellable() {
+        // ... existing code ...
+    }
+
+    // --- New: Load from SwiftData with offline fallback ---
+    private func loadAccountsFromSwiftDataOfflineFallback() async {
+        guard let context = modelContext else {
+            print("ModelContext not available for SwiftData offline load.")
+            return
+        }
+        // Try to get userId from auth, else fallback to UserDefaults
+        let userIdString = authService?.currentUser?.id.uuidString ?? UserDefaults.standard.string(forKey: lastUsedUserIdKey)
+        var userId: UUID? = nil
+        if let userIdString, let uuid = UUID(uuidString: userIdString) { userId = uuid }
+        let descriptor: FetchDescriptor<AccountEntity>
+        if let userId = userId {
+            descriptor = FetchDescriptor<AccountEntity>(predicate: #Predicate { $0.userId == userId })
+        } else {
+            descriptor = FetchDescriptor<AccountEntity>() // Load all accounts if no userId
+        }
+        do {
+            let storedAccounts = try context.fetch(descriptor)
+            let uiAccounts = storedAccounts.map { entity in
+                EmailAccount(
+                    id: UUID(),
+                    userId: entity.userId,
+                    emailAddress: entity.emailAddress,
+                    provider: entity.provider,
+                    accountName: entity.accountName,
+                    lastSyncedAt: entity.lastSyncedAt,
+                    createdAt: entity.createdAt,
+                    updatedAt: entity.updatedAt
+                )
+            }
+            await MainActor.run {
+                self.addedAccounts = uiAccounts
+                print("[Offline] Loaded \(uiAccounts.count) accounts from SwiftData.")
+            }
+            // Load emails for these accounts
+            await self.loadEmailsFromSwiftDataOfflineFallback(userId: userId)
+        } catch {
+            print("[Offline] Error loading accounts from SwiftData: \(error.localizedDescription)")
+            await MainActor.run { self.addedAccounts = [] }
+        }
+    }
+    private func loadEmailsFromSwiftDataOfflineFallback(userId: UUID?) async {
+        guard let context = modelContext else {
+            print("ModelContext not available for SwiftData offline email load.")
+            return
+        }
+        var emailsGrouped: [String: [EmailDisplayData]] = [:]
+        let userAccounts: [EmailAccount]
+        if let userId = userId {
+            userAccounts = self.addedAccounts.filter { $0.userId == userId }
+        } else {
+            userAccounts = self.addedAccounts
+        }
+        for account in userAccounts {
+            let accountEmail = account.emailAddress
+            let descriptor = FetchDescriptor<EmailEntity>(predicate: #Predicate { $0.accountEmail == accountEmail }, sortBy: [SortDescriptor(\.date, order: .reverse)])
+            do {
+                let storedEmailEntities = try context.fetch(descriptor)
+                let displayDatas = storedEmailEntities.map { entity -> EmailDisplayData in
+                    EmailDisplayData(
+                        gmailMessageId: entity.gmailMessageId,
+                        threadId: entity.threadId,
+                        messageIdHeader: entity.messageIdHeader,
+                        referencesHeader: entity.referencesHeader,
+                        sender: entity.sender,
+                        senderEmail: entity.senderEmail,
+                        recipient: entity.recipient,
+                        subject: entity.subject,
+                        snippet: entity.snippet,
+                        body: entity.body,
+                        date: entity.date,
+                        isRead: entity.isRead,
+                        previousMessages: nil,
+                        accountEmail: entity.accountEmail,
+                        labelIds: entity.labelIds
+                    )
+                }
+                emailsGrouped[accountEmail] = displayDatas
+                print("[Offline] Loaded \(displayDatas.count) emails from SwiftData for account \(accountEmail).")
+            } catch {
+                print("[Offline] Error loading emails from SwiftData for account \(accountEmail): \(error.localizedDescription)")
+            }
+        }
+        await MainActor.run { self.emailsByAccount = emailsGrouped }
+    }
+
+    private func loadAccountsFromSupabase(for userId: UUID) async {
+        print("Attempting to load accounts from Supabase for user: \(userId)")
+        do {
+            let loadedAccountsFromDB: [EmailAccount] = try await supabase
+                .from("accounts")
+                .select()
+                .eq("user_id", value: userId.uuidString)
+                .execute()
+                .value
+
+            await MainActor.run {
+                self.addedAccounts = loadedAccountsFromDB
+                print("Successfully loaded \(loadedAccountsFromDB.count) accounts from Supabase.")
+            }
+
+            if !loadedAccountsFromDB.isEmpty {
+                // Save these to SwiftData
+                await saveAccountsToSwiftData(accounts: loadedAccountsFromDB, for: userId)
+                // Load related data from Supabase initially if not in SwiftData from a previous session
+                await loadLabelsFromDatabase(for: userId) // This loads from Supabase & saves to SwiftData
+                await loadEmailsFromDatabase(for: userId) // This loads from Supabase & saves to SwiftData
+            } else {
+                 await MainActor.run {
+                     self.labelsByAccount = [:]
+                     self.emailsByAccount = [:]
+                 }
+            }
+            // Trigger API fetches which will also update SwiftData
+            await triggerAPIFetchesForLoadedAccounts()
+
+        } catch {
+            print("Error loading accounts from Supabase: \(error.localizedDescription)")
+            await MainActor.run {
+                self.errorMessage = "Failed to load saved accounts: \(error.localizedDescription)"
+                self.addedAccounts = []
+                self.labelsByAccount = [:]
+                self.emailsByAccount = [:]
+            }
+        }
+    }
+
+    private func triggerAPIFetchesForLoadedAccounts() async {
+        let accountsToFetch = await self.addedAccounts // Use the MainActor isolated version
+        if accountsToFetch.isEmpty {
+            print("No accounts to trigger API fetches for.")
+            return
+        }
+        print("Triggering API fetches for labels and emails for loaded accounts...")
+        for account in accountsToFetch {
+            self.fetchLabels(for: account) // fetchLabels will handle its own Task/async and SwiftData saving
+        }
+        self.fetchAllInboxMessages() // fetchAllInboxMessages will handle its own Task/async and SwiftData saving
+    }
+
+    @MainActor
+    private func saveAccountsToSwiftData(accounts: [EmailAccount], for userId: UUID) async {
+        guard let context = modelContext else {
+            print("ModelContext not available for saving accounts.")
+            return
+        }
+        print("Saving \(accounts.count) accounts to SwiftData for user \(userId)...")
+        for acc in accounts {
+            // Check if account already exists to prevent duplicates based on emailAddress
+            let email = acc.emailAddress
+            let descriptor = FetchDescriptor<AccountEntity>(
+                predicate: #Predicate { $0.emailAddress == email && $0.userId == userId }
+            )
+            
+            do {
+                if let existingAccount = try context.fetch(descriptor).first {
+                    // Update existing account
+                    existingAccount.provider = acc.provider
+                    existingAccount.accountName = acc.accountName
+                    existingAccount.lastSyncedAt = acc.lastSyncedAt ?? Date() // Update sync time
+                    existingAccount.updatedAt = Date()
+                    print("Updated existing account in SwiftData: \(email)")
+                } else {
+                    // Insert new account
+                    let newAccountEntity = AccountEntity(
+                        emailAddress: acc.emailAddress,
+                        userId: userId, // Ensure userId is set
+                        provider: acc.provider,
+                        accountName: acc.accountName,
+                        lastSyncedAt: acc.lastSyncedAt ?? Date(),
+                        createdAt: Date(),
+                        updatedAt: Date()
+                    )
+                    context.insert(newAccountEntity)
+                    print("Inserted new account to SwiftData: \(email)")
+                }
+            } catch {
+                print("Error checking/saving account \(email) to SwiftData: \(error.localizedDescription)")
+            }
+        }
+        
+        // Save the context changes
+        do {
+            try context.save()
+            print("Successfully saved accounts context to SwiftData.")
+        } catch {
+            print("Error saving accounts context to SwiftData: \(error.localizedDescription)")
+        }
+    }
+    
+    // MARK: - SwiftData Loading and Saving Functions
+
+    @MainActor
+    private func saveEmailsToSwiftData(supabaseEmails: [SupabaseEmail], for userId: UUID) async {
+        print("SwiftData DEBUG: Entered saveEmailsToSwiftData with \(supabaseEmails.count) emails")
+        guard let context = modelContext else {
+            print("ModelContext not available for saving emails to SwiftData.")
+            return
+        }
+        print("Saving/Updating \(supabaseEmails.count) emails to SwiftData for user \(userId)...")
+
+        for emailData in supabaseEmails {
+            let providerMsgId = emailData.providerMessageId
+            let accEmail = emailData.accountEmail
+            
+            let descriptor = FetchDescriptor<EmailEntity>(
+                predicate: #Predicate { $0.gmailMessageId == providerMsgId && $0.accountEmail == accEmail }
+            )
+            
+            do {
+                if let existingEmail = try context.fetch(descriptor).first {
+                    // Update existing email
+                    existingEmail.threadId = emailData.threadId
+                    existingEmail.messageIdHeader = emailData.messageIdHeader
+                    existingEmail.referencesHeader = emailData.referencesHeader
+                    existingEmail.sender = emailData.senderName ?? emailData.senderEmail ?? "Unknown Sender"
+                    existingEmail.senderEmail = emailData.senderEmail
+                    existingEmail.recipient = emailData.recipientTo
+                    existingEmail.subject = emailData.subject ?? "No Subject"
+                    existingEmail.snippet = emailData.snippet ?? ""
+                    // Body is not in SupabaseEmail, so it won't be updated here unless fetched separately
+                    existingEmail.date = emailData.dateReceived
+                    existingEmail.isRead = emailData.isRead
+                    existingEmail.labelIds = emailData.labelIds
+                    // print("Updated email in SwiftData: \(existingEmail.subject) for \(accEmail)")
+                } else {
+                    // Insert new email
+                    let newEmailEntity = EmailEntity(
+                        gmailMessageId: emailData.providerMessageId,
+                        threadId: emailData.threadId,
+                        messageIdHeader: emailData.messageIdHeader,
+                        referencesHeader: emailData.referencesHeader,
+                        sender: emailData.senderName ?? emailData.senderEmail ?? "Unknown Sender",
+                        senderEmail: emailData.senderEmail,
+                        recipient: emailData.recipientTo,
+                        subject: emailData.subject ?? "No Subject",
+                        snippet: emailData.snippet ?? "",
+                        body: "", // Body needs to be fetched separately and updated
+                        date: emailData.dateReceived,
+                        isRead: emailData.isRead,
+                        accountEmail: emailData.accountEmail,
+                        labelIds: emailData.labelIds
+                    )
+                    context.insert(newEmailEntity)
+                    // print("Inserted new email to SwiftData: \(newEmailEntity.subject) for \(accEmail)")
+                }
+            } catch {
+                print("Error checking/saving email \(providerMsgId) to SwiftData: \(error.localizedDescription)")
+            }
+        }
+        
+        do {
+            try context.save()
+            print("Successfully saved emails context to SwiftData.")
+        } catch {
+            print("Error saving emails context to SwiftData: \(error.localizedDescription)")
+        }
+    }
+
+    // Note: Duplicate implementations of fetchLabels(for:), syncLabelsToDatabase(userId:accountEmail:labels:), 
+    // and fetchAllInboxMessagesAsync() were removed from this section. 
+    // The original implementations defined earlier in the file are being used instead.
+
+    @MainActor
+    private func loadLabelsFromSwiftData(for userId: UUID) async {
+        guard let context = modelContext else {
+            print("ModelContext not available for loading labels from SwiftData.")
+            return
+        }
+        print("Attempting to load labels from SwiftData for user: \(userId)")
+        
+        let descriptor = FetchDescriptor<LabelEntity>(
+            // We might need to fetch all labels and then group them by accountEmail,
+            // or filter by specific account emails if we load them one by one.
+            // For now, let's fetch all for the user and group.
+            // predicate: #Predicate { $0.accountEmail == ??? } // Need account context here
+        )
+        
+        do {
+            let storedLabelEntities = try context.fetch(descriptor)
+            var labelsGrouped: [String: [GTLRGmail_Label]] = [:]
+            
+            for labelEntity in storedLabelEntities {
+                // Filter out labels not belonging to the current user's accounts if needed,
+                // though ideally, data should be user-specific if userId was part of LabelEntity or fetched per account.
+                // For now, assuming LabelEntity.accountEmail is sufficient if we filter UserViewModel.addedAccounts first.
+                
+                // Only process labels for accounts that are currently loaded for this user
+                if self.addedAccounts.contains(where: { $0.emailAddress == labelEntity.accountEmail && $0.userId == userId }) {
+                    let gtlrLabel = GTLRGmail_Label()
+                    gtlrLabel.identifier = labelEntity.providerLabelId
+                    gtlrLabel.name = labelEntity.name
+                    gtlrLabel.type = labelEntity.type
+                    labelsGrouped[labelEntity.accountEmail, default: []].append(gtlrLabel)
+                }
+            }
+            
+            // Only update if new data was actually loaded to avoid overwriting with empty if called prematurely
+            if !labelsGrouped.isEmpty || storedLabelEntities.isEmpty { // If empty, means no data or we cleared it
+                 self.labelsByAccount = labelsGrouped
+            }
+            print("Successfully loaded \(storedLabelEntities.count) labels from SwiftData and mapped to UI state for user \(userId).")
+
+        } catch {
+            print("Error loading labels from SwiftData: \(error.localizedDescription)")
+            self.errorMessage = "Failed to load label cache from local: \(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func loadEmailsFromSwiftData(for userId: UUID) async {
+        guard let context = modelContext else {
+            print("ModelContext not available for loading emails from SwiftData.")
+            return
+        }
+        print("Attempting to load emails from SwiftData for user: \(userId)")
+        
+        // Fetch all emails for the current user's accounts
+        // We'll need to iterate through addedAccounts or fetch all and filter
+        var emailsGrouped: [String: [EmailDisplayData]] = [:]
+        let userAccounts = self.addedAccounts.filter { $0.userId == userId }
+
+        for account in userAccounts {
+            let accountEmail = account.emailAddress
+            let descriptor = FetchDescriptor<EmailEntity>(
+                predicate: #Predicate { $0.accountEmail == accountEmail },
+                sortBy: [SortDescriptor(\.date, order: .reverse)] // Fix the key path syntax
+            )
+            
+            do {
+                let storedEmailEntities = try context.fetch(descriptor)
+                let displayDatas = storedEmailEntities.map { entity -> EmailDisplayData in
+                    // Map EmailEntity to EmailDisplayData
+                    // Note: Body might be large. Consider if it should always be loaded or fetched on demand.
+                    // For now, including it.
+                    // `previousMessages` needs to be handled, likely by fetching other emails in the same threadId.
+                    return EmailDisplayData(
+                        gmailMessageId: entity.gmailMessageId,
+                        threadId: entity.threadId,
+                        messageIdHeader: entity.messageIdHeader,
+                        referencesHeader: entity.referencesHeader,
+                        sender: entity.sender,
+                        senderEmail: entity.senderEmail,
+                        recipient: entity.recipient,
+                        subject: entity.subject,
+                        snippet: entity.snippet,
+                        body: entity.body, // Assuming body is stored and needed
+                        date: entity.date,
+                        isRead: entity.isRead,
+                        previousMessages: nil, // TODO: Populate thread history if needed for display
+                        accountEmail: entity.accountEmail,
+                        labelIds: entity.labelIds
+                    )
+                }
+                emailsGrouped[accountEmail] = displayDatas
+                print("Loaded \(displayDatas.count) emails from SwiftData for account \(accountEmail).")
+            } catch {
+                print("Error loading emails from SwiftData for account \(accountEmail): \(error.localizedDescription)")
+                // Continue to try loading for other accounts
+            }
+        }
+        
+        // Only update if new data was actually loaded
+        if !emailsGrouped.isEmpty || userAccounts.isEmpty { // If userAccounts is empty, emailsByAccount should be empty
+             self.emailsByAccount = emailsGrouped // Update UI state
+        }
+        print("Finished loading emails from SwiftData for user \(userId). Total accounts processed: \(userAccounts.count).")
+    }
+    // --- End SwiftData Loading Functions ---
+
+    func clearUserSession() {
+        print("Clearing user session data in UserViewModel.")
+        userEmail = nil
+        userName = nil
+        addedAccounts = []
+        emailsByAccount = [:]
+        labelsByAccount = [:]
+        nextPageTokens = [:]
+        selectedAccountFilter = nil
+        selectedLabelFilter = nil
+        errorMessage = nil
+        isLoading = false
+        // Note: This does not clear SwiftData. If SwiftData should be cleared on logout,
+        // that logic needs to be added here, considering multi-user data implications.
+    }
+
+    // MARK: - UserDefaults Keys
+    private let lastUsedUserIdKey = "lastUsedUserId"
+    private let lastUsedUserEmailKey = "lastUsedUserEmail"
+}

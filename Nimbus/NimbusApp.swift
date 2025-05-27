@@ -53,7 +53,12 @@ struct NimbusApp: App {
     // Re-add the sharedModelContainer
     var sharedModelContainer: ModelContainer = {
         // Schema is now empty as Transaction is removed
-        let schema = Schema([])
+        let schema = Schema([
+            Item.self, // Keep existing Item if still used
+            EmailEntity.self,
+            AccountEntity.self,
+            LabelEntity.self
+        ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
         do {

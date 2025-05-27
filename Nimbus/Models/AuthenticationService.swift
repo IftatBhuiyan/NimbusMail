@@ -21,7 +21,7 @@ enum AuthError: Error {
 
 // Authentication service class using Supabase
 @MainActor // Ensure @Published properties are updated on the main thread
-class AuthenticationService: NSObject {
+class AuthenticationService: NSObject, ObservableObject {
     static let shared = AuthenticationService()
     
     // Current nonce for Apple sign-in

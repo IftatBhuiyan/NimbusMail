@@ -61,6 +61,7 @@ struct SupabaseEmail: Codable, Hashable {
     var hasAttachments: Bool
     var createdAt: Date?
     var updatedAt: Date?
+    var labelIds: [String]? // Added for transient storage before SwiftData save
     
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
